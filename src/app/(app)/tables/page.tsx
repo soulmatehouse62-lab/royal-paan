@@ -1,8 +1,7 @@
 import { Suspense } from "react";
 import { requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { TableDashboard } from "@/components/tables/table-dashboard";
-import { redirect } from "next/navigation";
+import { TableDashboardClient } from "@/components/tables/table-dashboard-client";
 
 export default async function TablesPage() {
   const user = await requireUser();
@@ -42,10 +41,6 @@ export default async function TablesPage() {
     staffName: table.tableOrders[0]?.staff?.name,
   }));
 
-  const handleTableClick = (tableId: string) => {
-    redirect(`/tables/${tableId}/order`);
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -54,10 +49,7 @@ export default async function TablesPage() {
       </div>
 
       <Suspense fallback={<TablesSkeleton />}>
-        <TableDashboard
-          tables={formattedTables}
-          onTableClick={handleTableClick}
-        />
+        <TableDashboardClient tables={formattedTables} />
       </Suspense>
     </div>
   );
