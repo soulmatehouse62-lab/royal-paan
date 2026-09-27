@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/* Royal Paan palette: warm cream, paan-leaf green (the signboard), rani pink
+   (the Hindi signboard) and a touch of gold. */
+@theme {
+  --color-cream: #fbf6ec;
+  --color-cream-deep: #f3eadb;
+  --color-card: #fffdf9;
+  --color-ink: #1f1a17;
+  --color-muted: #6e655c;
+  --color-line: #e9dfcd;
+
+  --color-leaf: #1e5631;
+  --color-leaf-dark: #133b21;
+  --color-leaf-soft: #e5f0e7;
+
+  --color-rani: #b0156c;
+  --color-rani-dark: #8a0f54;
+  --color-rani-soft: #fbe6f1;
+
+  --color-gold: #c7922f;
+  --color-gold-soft: #fbf1dc;
+
+  --color-danger: #c0392b;
+  --color-danger-soft: #fdecea;
+  --color-ok: #1e7a45;
+  --color-ok-soft: #e3f3e8;
+  --color-warn: #b7791f;
+  --color-warn-soft: #fdf3dd;
+
+  /* Latin glyphs come from Fraunces / DM Sans; Devanagari falls through to Tiro / Mukta. */
+  --font-display: var(--font-fraunces), var(--font-tiro), ui-serif, Georgia, serif;
+  --font-sans: var(--font-dm-sans), var(--font-mukta), ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(31 26 23 / 0.04), 0 6px 20px -6px rgb(31 26 23 / 0.1);
+  --shadow-float: 0 10px 30px -8px rgb(31 26 23 / 0.35);
+  --radius-card: 1.25rem;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-cream text-ink font-sans antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+  }
+  /* Letter-spacing breaks the joined headline (shirorekha) of Devanagari. */
+  html[lang="hi"] [class*="tracking-"] {
+    letter-spacing: 0 !important;
+  }
+  html[lang="hi"] .uppercase {
+    text-transform: none;
+  }
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+  /* No spinner arrows on number inputs. */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-leaf;
+  }
+}
+
+@utility card {
+  @apply bg-card rounded-card shadow-card border border-line/60;
+}
+@utility input {
+  @apply w-full h-12 rounded-xl border border-line bg-white px-3.5 text-[15px] text-ink placeholder:text-muted/70
+    transition-colors focus:border-leaf focus:outline-none focus:ring-2 focus:ring-leaf/20;
+}
+@utility label {
+  @apply mb-1.5 block text-[13px] font-medium text-muted;
+}
+@utility btn {
+  @apply inline-flex h-12 select-none items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-semibold
+    transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-leaf text-white shadow-sm hover:bg-leaf-dark;
+}
+@utility btn-accent {
+  @apply btn bg-rani text-white shadow-sm hover:bg-rani-dark;
+}
+@utility btn-ghost {
+  @apply btn border border-line bg-white text-ink hover:bg-cream-deep;
+}
+@utility btn-danger {
+  @apply btn border border-danger/30 bg-danger-soft text-danger hover:bg-danger hover:text-white;
+}
+@utility btn-sm {
+  @apply h-10 rounded-lg px-3 text-sm;
+}
+@utility chip {
+  @apply inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition;
+}
+@utility skeleton {
+  @apply animate-pulse rounded-xl bg-cream-deep;
+}
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Bottom sheet on mobile, centred dialog on larger screens. */
+dialog.sheet {
+  margin: auto auto 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 92dvh;
+  border-radius: 1.5rem 1.5rem 0 0;
+  padding: 0;
+  border: 0;
+  background: var(--color-card);
+  color: var(--color-ink);
+}
+dialog.sheet::backdrop {
+  background: rgb(31 26 23 / 0.45);
+}
+dialog.sheet[open] {
+  animation: sheet-up 0.22s ease-out;
+}
+@media (min-width: 640px) {
+  dialog.sheet {
+    margin: auto;
+    max-width: 30rem;
+    border-radius: 1.5rem;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(32px);
+  }
+}
+
+/* Printing a bill: show only the bill. Works on A4 and 80 mm thermal paper. */
+@media print {
+  @page {
+    margin: 4mm;
+  }
+  body {
+    background: white !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #bill,
+  #bill * {
+    visibility: visible;
+  }
+  #bill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 76mm;
+    box-shadow: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    font-size: 11pt;
+    color: black;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

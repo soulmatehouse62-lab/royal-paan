@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum DiscountType {
+  FLAT
+  PERCENT
+}
+
+enum OrderStatus {
+  PAID
+  UNPAID
+  PARTIAL
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+/// One size of a menu item, e.g. { name: "Large", price: 6000 }.
+type Variant {
+  name  String
+  price Int
+}
+
+/// All money is stored in paise (1 rupee = 100 paise).
+model MenuItem {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  /// Optional Hindi name shown to staff who use the app in Hindi.
+  nameHi      String?
+  /// The single price, or the lowest size price when the item has sizes.
+  price       Int
+  /// Empty = one fixed price.
+  variants    Variant[]
+  category    String
+  isAvailable Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+  @@map("menu_items")
+}
+
+model Order {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber    Int           @unique
+  customerName   String?
+  customerPhone  String?
+  /// Last 10 digits of customerPhone, used for returning-customer lookup.
+  phoneKey       String?
+  tableNumber    String?
+  subtotal       Int
+  discountType   DiscountType?
+  /// The raw discount input (rupees for FLAT, percent for PERCENT).
+  discountValue  Float?
+  discountAmount Int           @default(0)
+  total          Int
+  amountPaid     Int           @default(0)
+  balanceDue     Int
+  status         OrderStatus
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  items    OrderItem[]
+  payments Payment[]
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@index([balanceDue])
+  @@index([customerPhone])
+  @@index([phoneKey])
+  @@map("orders")
+}
+
+/// A bill line. Name, size, category and price are snapshots taken when the
+/// line was added, so editing or deleting the menu item never changes old bills.
+model OrderItem {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  orderId     String  @db.ObjectId
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  /// Set to null when the menu item is deleted.
+  menuItemId  String? @db.ObjectId
+  itemName    String
+  itemNameHi  String?
+  variantName String?
+  category    String
+  unitPrice   Int
+  quantity    Int
+  lineTotal   Int
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@map("order_items")
+}
+
+model Payment {
+  id      String        @id @default(auto()) @map("_id") @db.ObjectId
+  orderId String        @db.ObjectId
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amount  Int
+  method  PaymentMethod
+  paidAt  DateTime      @default(now())
+
+  @@index([orderId])
+  @@index([paidAt])
+  @@index([method, paidAt])
+  @@map("payments")
+}
+
+/// { _id: "order", seq } – incremented inside the order-creation transaction.
+model Counter {
+  id  String @id @map("_id")
+  seq Int
+
+  @@map("counters")
+}
+
+model Customer {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  phoneKey    String   @unique
+  phone       String
+  name        String?
+  /// Lowercased words of the name, for "any word" prefix search.
+  nameWords   String[]
+  lastVisitAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([nameWords])
+  @@index([lastVisitAt])
+  @@map("customers")
+}
+
+model User {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  username          String    @unique
+  name              String
+  passwordHash      String
+  role              Role      @default(STAFF)
+  isActive          Boolean   @default(true)
+  passwordChangedAt DateTime  @default(now())
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  sessions Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  /// SHA-256 of the cookie token. The raw token is never stored.
+  tokenHash  String   @unique
+  userId     String   @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// { _id: "user:<username>" }
+model LoginThrottle {
+  id          String    @id @map("_id")
+  failures    Int
+  windowStart DateTime
+  lockedUntil DateTime?
+
+  @@map("login_throttles")
+}
