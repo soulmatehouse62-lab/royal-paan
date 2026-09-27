@@ -16,6 +16,7 @@ export const en = {
   // Navigation
   "nav.main": "Main",
   "nav.newOrder": "New order",
+  "nav.tables": "Tables",
   "nav.dues": "Dues",
   "nav.history": "History",
   "nav.analytics": "Analytics",
@@ -427,6 +428,7 @@ export const hi: Messages = {
 
   "nav.main": "मुख्य",
   "nav.newOrder": "नया ऑर्डर",
+  "nav.tables": "टेबल्स",
   "nav.dues": "उधार",
   "nav.history": "पुराने बिल",
   "nav.analytics": "रिपोर्ट",
