@@ -13,20 +13,43 @@ enum DiscountType {
 }
 
 enum OrderStatus {
+  RUNNING
+  BILLED
   PAID
   UNPAID
   PARTIAL
+  CANCELLED
 }
 
 enum PaymentMethod {
   CASH
   UPI
   CARD
+  SPLIT
 }
 
 enum Role {
   ADMIN
   STAFF
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  BILLED
+}
+
+enum OrderItemStatus {
+  PENDING
+  SENT_TO_KITCHEN
+  CANCELLED
+}
+
+enum TableArea {
+  INDOOR
+  OUTDOOR
+  AC_HALL
+  OTHER
 }
 
 /// One size of a menu item, e.g. { name: "Large", price: 6000 }.
@@ -155,7 +178,8 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  sessions Session[]
+  sessions    Session[]
+  tableOrders TableOrder[]
 
   @@map("users")
 }
@@ -165,7 +189,7 @@ model Session {
   /// SHA-256 of the cookie token. The raw token is never stored.
   tokenHash  String   @unique
   userId     String   @db.ObjectId
-  user       User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   createdAt  DateTime @default(now())
   expiresAt  DateTime
   lastSeenAt DateTime @default(now())
@@ -184,4 +208,122 @@ model LoginThrottle {
   lockedUntil DateTime?
 
   @@map("login_throttles")
+}
+
+model Table {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  tableNumber String      @unique
+  name        String?
+  capacity    Int
+  area        TableArea   @default(OTHER)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tableOrders TableOrder[]
+
+  @@index([area])
+  @@index([isActive])
+  @@map("tables")
+}
+
+model TableOrder {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  tableId       String        @db.ObjectId
+  table         Table         @relation(fields: [tableId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  staffId       String        @db.ObjectId
+  staff         User          @relation(fields: [staffId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pax           Int?
+  status        OrderStatus   @default(RUNNING)
+  subtotal      Int           @default(0)
+  discountType  DiscountType?
+  discountValue Float?
+  discountAmount Int          @default(0)
+  cgst          Float?
+  sgst          Float?
+  serviceCharge Int?
+  roundOff      Int?
+  total         Int           @default(0)
+  amountPaid    Int           @default(0)
+  balanceDue    Int           @default(0)
+  paymentMethod PaymentMethod?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  closedAt      DateTime?
+
+  items TableOrderItem[]
+  kots  KOT[]
+  bills Bill[]
+
+  @@index([tableId])
+  @@index([staffId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("table_orders")
+}
+
+model TableOrderItem {
+  id            String            @id @default(auto()) @map("_id") @db.ObjectId
+  tableOrderId  String            @db.ObjectId
+  tableOrder    TableOrder        @relation(fields: [tableOrderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  menuItemId    String?           @db.ObjectId
+  itemName      String
+  itemNameHi    String?
+  variantName   String?
+  category      String
+  unitPrice     Int
+  quantity      Int
+  lineTotal     Int
+  note          String?
+  status        OrderItemStatus   @default(PENDING)
+  kotId         String?           @db.ObjectId
+  kot           KOT?              @relation(fields: [kotId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([tableOrderId])
+  @@index([menuItemId])
+  @@index([status])
+  @@index([kotId])
+  @@map("table_order_items")
+}
+
+model KOT {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  kotNumber   Int       @unique
+  tableOrderId String   @db.ObjectId
+  tableOrder  TableOrder @relation(fields: [tableOrderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  printedBy   String    @db.ObjectId
+  printedAt   DateTime  @default(now())
+  isDuplicate Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  items TableOrderItem[]
+
+  @@index([tableOrderId])
+  @@index([printedAt])
+  @@map("kots")
+}
+
+model Bill {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  billNumber   Int        @unique
+  tableOrderId String     @db.ObjectId
+  tableOrder   TableOrder @relation(fields: [tableOrderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  subtotal     Int
+  discount     Int        @default(0)
+  cgst         Float?
+  sgst         Float?
+  serviceCharge Int?
+  roundOff     Int?
+  total        Int
+  isDuplicate  Boolean    @default(false)
+  printedAt    DateTime   @default(now())
+  paidAt       DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@index([tableOrderId])
+  @@index([printedAt])
+  @@map("bills")
 }
