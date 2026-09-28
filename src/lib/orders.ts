@@ -35,7 +35,7 @@ const discountSchema = z
   .optional()
   .refine((d) => !d || d.type !== "PERCENT" || d.value <= 100, "err.percentMax");
 
-const newLine = z.object({
+export const newLine = z.object({
   menuItemId: objectId,
   variantName: z.string().trim().max(40).optional().nullable(),
   quantity,
@@ -70,7 +70,7 @@ export type UpdateOrderInput = z.infer<typeof updateOrderSchema>;
 
 // ---------- Helpers ----------
 
-type LineSnapshot = {
+export type LineSnapshot = {
   menuItemId: string;
   itemName: string;
   itemNameHi: string | null;
@@ -82,7 +82,7 @@ type LineSnapshot = {
 };
 
 /** Price lines from the current menu. The client only sends ids, sizes and quantities. */
-async function priceNewLines(lines: z.infer<typeof newLine>[]): Promise<LineSnapshot[]> {
+export async function priceNewLines(lines: z.infer<typeof newLine>[]): Promise<LineSnapshot[]> {
   if (lines.length === 0) return [];
   const ids = Array.from(new Set(lines.map((l) => l.menuItemId)));
   const items = await prisma.menuItem.findMany({
@@ -137,7 +137,7 @@ function discountFields(subtotal: number, discount: CreateOrderInput["discount"]
   };
 }
 
-function customerFields(input: z.infer<typeof customerSchema>) {
+export function customerFields(input: z.infer<typeof customerSchema>) {
   const phone = normalizePhone(input.customerPhone);
   return {
     customerName: input.customerName || null,
@@ -216,10 +216,22 @@ export const getReceipt = cache(async (id: string): Promise<Receipt | null> => {
 
 export async function createOrder(input: CreateOrderInput): Promise<Receipt> {
   const lines = await priceNewLines(input.items);
+  const customer = customerFields(input);
+  const order = await withTransaction((tx) => insertOrder(tx, input, customer, lines));
+  await touchCustomer(customer.customerPhone, customer.customerName, order.createdAt);
+  return order;
+}
+
+/** Number, total and record a bill (with its first payment) from already-priced lines. */
+export async function insertOrder(
+  tx: Tx,
+  input: Pick<CreateOrderInput, "discount" | "payment">,
+  customer: ReturnType<typeof customerFields>,
+  lines: LineSnapshot[],
+): Promise<Receipt> {
   const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
   const discount = discountFields(subtotal, input.discount);
   const total = subtotal - discount.discountAmount;
-  const customer = customerFields(input);
 
   let pay = 0;
   if (input.payment.status === "PAID") {
@@ -231,30 +243,25 @@ export async function createOrder(input: CreateOrderInput): Promise<Receipt> {
     if (pay > total) throw new ActionError("err.paidOverTotal", { total: formatMoney(total) });
   }
 
-  const order = await withTransaction(async (tx) => {
-    const counter = await tx.counter.upsert({
-      where: { id: "order" },
-      create: { id: "order", seq: 1 },
-      update: { seq: { increment: 1 } },
-    });
-    // The payment below is the order's only payment, so SUM(payments) = pay.
-    return tx.order.create({
-      data: {
-        orderNumber: counter.seq,
-        ...customer,
-        subtotal,
-        ...discount,
-        total,
-        ...totalsFromPayments(total, pay),
-        items: { create: lines },
-        payments: pay > 0 ? { create: { amount: pay, method: input.payment.method } } : undefined,
-      },
-      select: receiptSelect,
-    });
+  const counter = await tx.counter.upsert({
+    where: { id: "order" },
+    create: { id: "order", seq: 1 },
+    update: { seq: { increment: 1 } },
   });
-
-  await touchCustomer(customer.customerPhone, customer.customerName, order.createdAt);
-  return order;
+  // The payment below is the order's only payment, so SUM(payments) = pay.
+  return tx.order.create({
+    data: {
+      orderNumber: counter.seq,
+      ...customer,
+      subtotal,
+      ...discount,
+      total,
+      ...totalsFromPayments(total, pay),
+      items: { create: lines },
+      payments: pay > 0 ? { create: { amount: pay, method: input.payment.method } } : undefined,
+    },
+    select: receiptSelect,
+  });
 }
 
 export async function updateOrder(input: UpdateOrderInput): Promise<void> {

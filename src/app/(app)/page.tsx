@@ -6,12 +6,18 @@ import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
 import { dayRange, greetingKey, toYmd } from "@/lib/time";
 import { getT } from "@/lib/i18n/server";
-import { OrderBuilder } from "@/components/order/order-builder";
+import { NewOrderFlow } from "@/components/order/new-order-flow";
+import type { PickerTable } from "@/components/order/table-picker";
 import { Empty } from "@/components/ui";
 import { BookOpen } from "lucide-react";
 
 export default async function NewOrderPage() {
-  const [user, t, all] = await Promise.all([requireUser(), getT(), getMenu()]);
+  const [user, t, all, tables] = await Promise.all([
+    requireUser(),
+    getT(),
+    getMenu(),
+    getPickerTables(),
+  ]);
   const menu = all.filter((m) => m.isAvailable);
   const labels = { greeting: t(greetingKey()), collected: t("home.collectedToday"), orders: t("home.ordersToday"), dues: t("home.openDues") };
 
@@ -26,10 +32,28 @@ export default async function NewOrderPage() {
           <Link href="/menu" className="btn-primary btn-sm mt-3">{t("home.openMenu")}</Link>
         </Empty>
       ) : (
-        <OrderBuilder menu={menu} />
+        <NewOrderFlow menu={menu} tables={tables} />
       )}
     </>
   );
+}
+
+async function getPickerTables(): Promise<PickerTable[]> {
+  const tables = await prisma.table.findMany({
+    where: { isActive: true },
+    select: { id: true, tableNumber: true, name: true, capacity: true, area: true, activeOrderId: true },
+  });
+  const activeIds = tables.flatMap((tb) => (tb.activeOrderId ? [tb.activeOrderId] : []));
+  const running = activeIds.length
+    ? await prisma.tableOrder.findMany({
+        where: { id: { in: activeIds } },
+        select: { id: true, subtotal: true, createdAt: true, staff: { select: { name: true } } },
+      })
+    : [];
+  const byId = new Map(running.map((r) => [r.id, { subtotal: r.subtotal, since: r.createdAt, staffName: r.staff.name }]));
+  return tables
+    .map(({ activeOrderId, ...tb }) => ({ ...tb, running: (activeOrderId && byId.get(activeOrderId)) || null }))
+    .sort((a, b) => a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true }));
 }
 
 type Labels = { greeting: string; collected: string; orders: string; dues: string };
@@ -56,7 +80,7 @@ async function GreetingStrip({ name, labels }: { name: string; labels: Labels })
 function Strip({ name, labels, collected, orders, dues }: { name: string; labels: Labels; collected: React.ReactNode; orders: React.ReactNode; dues: React.ReactNode }) {
   return (
     <section className="mb-5 overflow-hidden rounded-card bg-leaf text-white shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 bg-[radial-gradient(circle_at_100%_0%,rgb(176_21_108/0.55),transparent_55%)] px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 bg-[radial-gradient(circle_at_100%_0%,rgb(26_21_16/0.6),transparent_55%)] px-5 py-4">
         <div>
           <p className="text-sm text-white/75">{labels.greeting},</p>
           <p className="font-display text-2xl font-semibold leading-tight">{name.split(" ")[0]}</p>

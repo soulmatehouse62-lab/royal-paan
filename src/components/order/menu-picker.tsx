@@ -51,7 +51,7 @@ export function MenuPicker({ menu, counts, onAdd }: Props) {
       </div>
 
       <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1" role="tablist" aria-label={t("picker.categories")}>
-        <CategoryTab active={!category && !query} onClick={() => { setCategory(null); setQuery(""); }} label={t("picker.all")} icon={<LayoutGrid size={16} />} color="#1e5631" soft="#e5f0e7" />
+        <CategoryTab active={!category && !query} onClick={() => { setCategory(null); setQuery(""); }} label={t("picker.all")} icon={<LayoutGrid size={16} />} color="#805821" soft="#f3e8d3" />
         {categories.map((c) => {
           const s = categoryStyle(c);
           const Icon = s.icon;

@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChartColumn, History, Plus, ReceiptText, UserRound, Grid3x3 } from "lucide-react";
+import { BookOpen, ChartColumn, History, Plus, ReceiptText, UserRound } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
 
 const ITEMS = [
   { href: "/", label: "nav.newOrder", icon: Plus },
-  { href: "/tables", label: "nav.tables", icon: Grid3x3 },
   { href: "/dues", label: "nav.dues", icon: ReceiptText },
   { href: "/history", label: "nav.history", icon: History },
   { href: "/analytics", label: "nav.analytics", icon: ChartColumn },
@@ -49,7 +48,7 @@ export function PillNav() {
 export function AccountLink({ name }: { name: string }) {
   const pathname = usePathname();
   const t = useT();
-  const active = pathname.startsWith("/account") || pathname.startsWith("/users");
+  const active = pathname.startsWith("/account") || pathname.startsWith("/users") || pathname.startsWith("/tables");
   return (
     <Link
       href="/account"

@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LoaderCircle, Minus, Plus, Printer, ReceiptText, ShoppingBag, Trash2 } from "lucide-react";
+import { ChefHat, ChevronDown, LayoutGrid, LoaderCircle, Lock, Minus, Plus, Printer, ReceiptText, ShoppingBag, Trash2 } from "lucide-react";
 import type { DiscountType, OrderStatus, PaymentMethod } from "@prisma/client";
 import type { MenuEntry } from "@/lib/menu-data";
+import type { KotTicketView, SentLine } from "@/lib/table-orders";
 import { formatMoney, parseRupees } from "@/lib/money";
 import { discountAmount } from "@/lib/pricing";
 import { createOrderAction, updateOrderAction } from "@/app/actions/orders";
+import { sendKotAction, settleTableAction } from "@/app/actions/tables";
 import { MethodPicker } from "@/components/method-picker";
 import { Receipt, type ReceiptView } from "@/components/receipt";
+import { KotTicket } from "@/components/kot-ticket";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { itemNames } from "@/lib/i18n";
 import { sizeName } from "@/lib/categories";
@@ -39,16 +42,28 @@ export type EditInitial = {
   amountPaid: number;
 };
 
-type Props = { menu: MenuEntry[]; edit?: EditInitial };
+type Props = {
+  menu: MenuEntry[];
+  edit?: EditInitial;
+  /** Table chosen in the table picker (null = takeaway). Undefined shows the free-text table field. */
+  fixedTable?: string | null;
+  /** Items already sent to the kitchen for this table. */
+  initialSent?: SentLine[];
+  onChangeTable?: () => void;
+};
 
-export function OrderBuilder({ menu, edit }: Props) {
+export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTable }: Props) {
   const router = useRouter();
   const t = useT();
   const locale = useLocale();
+  // Dine-in: new items go to the kitchen as KOTs; the bill is made from everything sent.
+  const dineIn = typeof fixedTable === "string";
   const [lines, setLines] = useState<BillLine[]>(edit?.lines ?? []);
+  const [sent, setSent] = useState<SentLine[]>(initialSent ?? []);
+  const [kot, setKot] = useState<KotTicketView | null>(null);
   const [phone, setPhone] = useState(edit?.customerPhone ?? "");
   const [name, setName] = useState(edit?.customerName ?? "");
-  const [table, setTable] = useState(edit?.tableNumber ?? "");
+  const [table, setTable] = useState(edit?.tableNumber ?? fixedTable ?? "");
   const [discountType, setDiscountType] = useState<DiscountType>(edit?.discountType ?? "FLAT");
   const [discountInput, setDiscountInput] = useState(edit?.discountValue ? String(edit.discountValue) : "");
   const [status, setStatus] = useState<OrderStatus>("PAID");
@@ -79,12 +94,15 @@ export function OrderBuilder({ menu, edit }: Props) {
     return m;
   }, [lines]);
 
-  const subtotal = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+  const sentSubtotal = sent.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+  const newSubtotal = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+  const subtotal = sentSubtotal + newSubtotal;
   const discountValue = Number(discountInput) || 0;
   const discount = discountInput.trim() ? { type: discountType, value: discountValue } : null;
   const discountPaise = discountAmount(subtotal, discount);
   const total = subtotal - discountPaise;
-  const itemCount = lines.reduce((s, l) => s + l.quantity, 0);
+  const newCount = lines.reduce((s, l) => s + l.quantity, 0);
+  const itemCount = newCount + sent.reduce((s, l) => s + l.quantity, 0);
   const partialPaise = parseRupees(partial);
   const cashPaise = parseRupees(cashGiven);
   const change = cashPaise !== null && cashPaise >= total ? cashPaise - total : null;
@@ -103,10 +121,14 @@ export function OrderBuilder({ menu, edit }: Props) {
     setError(null);
     setSaved(null);
     window.scrollTo({ top: 0 });
+    onChangeTable?.();
   }
 
   function validate(): string | null {
-    if (lines.length === 0) return t("err.addItem");
+    if (dineIn) {
+      if (lines.length > 0) return t("kot.sendFirst");
+      if (sent.length === 0) return t("err.addItem");
+    } else if (lines.length === 0) return t("err.addItem");
     if (discountInput.trim() && (!(discountValue >= 0) || Number.isNaN(Number(discountInput)))) return t("bill.validDiscount");
     if (discountType === "PERCENT" && discountValue > 100) return t("err.percentMax");
     if (!edit && status === "PARTIAL") {
@@ -137,17 +159,43 @@ export function OrderBuilder({ menu, edit }: Props) {
         router.push(`/orders/${edit.orderId}`);
         return;
       }
-      const res = await createOrderAction({
-        ...customer,
-        discount,
-        items: lines.map((l) => ({ menuItemId: l.menuItemId!, variantName: l.variantName, quantity: l.quantity })),
-        payment: { status, method, amount: status === "PARTIAL" ? (partialPaise ?? 0) : undefined },
-      });
+      const payment = { status, method, amount: status === "PARTIAL" ? (partialPaise ?? 0) : undefined };
+      const res = dineIn
+        ? await settleTableAction({ ...customer, tableNumber: fixedTable, discount, payment })
+        : await createOrderAction({
+            ...customer,
+            discount,
+            items: lines.map((l) => ({ menuItemId: l.menuItemId!, variantName: l.variantName, quantity: l.quantity })),
+            payment,
+          });
       if (!res.ok) return setError(res.error);
       setSaved(res.data);
       window.scrollTo({ top: 0 });
     });
   }
+
+  function sendKot() {
+    if (!dineIn || lines.length === 0) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await sendKotAction({
+        tableNumber: fixedTable,
+        items: lines.map((l) => ({ menuItemId: l.menuItemId!, variantName: l.variantName, quantity: l.quantity })),
+      });
+      if (!res.ok) return setError(res.error);
+      setSent(res.data.sent);
+      setLines([]);
+      setKot(res.data.ticket);
+      window.scrollTo({ top: 0 });
+    });
+  }
+
+  // Print the kitchen ticket as soon as it is on screen.
+  useEffect(() => {
+    if (!kot) return;
+    const id = requestAnimationFrame(() => window.print());
+    return () => cancelAnimationFrame(id);
+  }, [kot]);
 
   // Mobile: a floating bill summary that scrolls down to the bill.
   const billRef = useRef<HTMLDivElement>(null);
@@ -158,7 +206,7 @@ export function OrderBuilder({ menu, edit }: Props) {
     const io = new IntersectionObserver(([e]) => setBillVisible(e.isIntersecting), { rootMargin: "0px 0px -30% 0px" });
     io.observe(el);
     return () => io.disconnect();
-  }, [saved]);
+  }, [saved, kot]);
 
   if (saved) {
     return (
@@ -180,7 +228,48 @@ export function OrderBuilder({ menu, edit }: Props) {
     );
   }
 
+  if (kot) {
+    return (
+      <div className="mx-auto max-w-sm space-y-4">
+        <div className="no-print flex items-center justify-center gap-2 rounded-2xl bg-ok-soft px-4 py-3 text-center font-semibold text-ok">
+          <ChefHat size={20} /> {t("kot.sent", { no: String(kot.kotNumber).padStart(4, "0") })}
+        </div>
+        <KotTicket kot={kot} />
+        <div className="no-print grid grid-cols-2 gap-2.5">
+          <button type="button" className="btn-ghost" onClick={() => window.print()}>
+            <Printer size={18} /> {t("kot.printAgain")}
+          </button>
+          <button type="button" className="btn-ghost" onClick={() => setKot(null)}>
+            <Plus size={18} /> {t("kot.addMore")}
+          </button>
+          <button type="button" className="btn-accent col-span-2 h-14 text-base" onClick={onChangeTable} autoFocus>
+            <LayoutGrid size={20} /> {t("kot.backToTables")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
+    <>
+    {fixedTable !== undefined && (
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-card border border-gold/40 bg-gold-soft px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className="grid size-11 place-items-center rounded-full bg-gold font-display text-lg font-semibold text-white">
+            {fixedTable ?? <ShoppingBag size={20} />}
+          </span>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">{t("tables.orderFor")}</p>
+            <p className="font-display text-lg font-semibold leading-tight">
+              {fixedTable ? t("common.table", { n: fixedTable }) : t("tables.takeaway")}
+            </p>
+          </div>
+        </div>
+        <button type="button" onClick={onChangeTable} className="btn-ghost btn-sm">
+          {t("tables.change")}
+        </button>
+      </div>
+    )}
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
       <MenuPicker menu={menu} counts={counts} onAdd={add} />
 
@@ -194,11 +283,35 @@ export function OrderBuilder({ menu, edit }: Props) {
           )}
         </div>
 
-        {lines.length === 0 ? (
-          <div className="flex flex-col items-center rounded-xl border border-dashed border-line py-8 text-center text-sm text-muted">
-            <ShoppingBag size={28} className="mb-2 text-leaf/60" />
-            {t("bill.empty")}
+        {sent.length > 0 && (
+          <div className="mb-3">
+            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+              <ChefHat size={14} /> {t("kot.inKitchen")}
+            </p>
+            <ul className="divide-y divide-line rounded-xl bg-cream px-3">
+              {sent.map((l) => (
+                <li key={l.key} className="flex items-center gap-2 py-2 text-sm">
+                  <Lock size={13} className="shrink-0 text-muted" />
+                  <div className="min-w-0 flex-1 truncate">
+                    {itemNames({ name: l.name, nameHi: l.nameHi }, locale).primary}
+                    {l.variantName && <span className="text-muted"> · {sizeName(l.variantName, locale)}</span>}
+                  </div>
+                  <span className="w-8 text-center font-semibold tabular-nums">×{l.quantity}</span>
+                  <span className="w-16 text-right tabular-nums">{formatMoney(l.unitPrice * l.quantity)}</span>
+                </li>
+              ))}
+            </ul>
+            {lines.length > 0 && <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-rani">{t("kot.new")}</p>}
           </div>
+        )}
+
+        {lines.length === 0 ? (
+          sent.length === 0 && (
+            <div className="flex flex-col items-center rounded-xl border border-dashed border-line py-8 text-center text-sm text-muted">
+              <ShoppingBag size={28} className="mb-2 text-leaf/60" />
+              {t("bill.empty")}
+            </div>
+          )
         ) : (
           <ul className="divide-y divide-line">
             {lines.map((l) => {
@@ -230,7 +343,7 @@ export function OrderBuilder({ menu, edit }: Props) {
         )}
 
         <div className="mt-4 space-y-4 border-t border-line pt-4">
-          <CustomerFields phone={phone} name={name} table={table} onPhone={setPhone} onName={setName} onTable={setTable} />
+          <CustomerFields phone={phone} name={name} table={table} onPhone={setPhone} onName={setName} onTable={setTable} showTable={fixedTable === undefined} />
 
           <div>
             <span className="label">{t("bill.discount")}</span>
@@ -282,7 +395,7 @@ export function OrderBuilder({ menu, edit }: Props) {
             )}
           </dl>
 
-          {!edit && (
+          {!edit && !(dineIn && lines.length > 0) && (
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-white p-1" role="radiogroup" aria-label={t("bill.paymentStatus")}>
                 {(
@@ -354,15 +467,22 @@ export function OrderBuilder({ menu, edit }: Props) {
                 {t("common.cancel")}
               </Link>
             )}
-            <button type="button" onClick={save} disabled={pending || lines.length === 0} className="btn-primary h-14 flex-[2] text-base">
-              {pending && <LoaderCircle size={18} className="animate-spin" />}
-              {edit ? t("bill.saveChanges") : t("bill.save", { amount: formatMoney(total) })}
-            </button>
+            {dineIn && lines.length > 0 ? (
+              <button type="button" onClick={sendKot} disabled={pending} className="btn-accent h-14 flex-[2] text-base">
+                {pending ? <LoaderCircle size={18} className="animate-spin" /> : <ChefHat size={20} />}
+                {t("kot.send", { n: newCount })}
+              </button>
+            ) : (
+              <button type="button" onClick={save} disabled={pending || (lines.length === 0 && sent.length === 0)} className="btn-primary h-14 flex-[2] text-base">
+                {pending && <LoaderCircle size={18} className="animate-spin" />}
+                {edit ? t("bill.saveChanges") : t("bill.save", { amount: formatMoney(total) })}
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {lines.length > 0 && !billVisible && (
+      {itemCount > 0 && !billVisible && (
         <button
           type="button"
           onClick={() => billRef.current?.scrollIntoView({ behavior: "smooth" })}
@@ -375,5 +495,6 @@ export function OrderBuilder({ menu, edit }: Props) {
         </button>
       )}
     </div>
+    </>
   );
 }

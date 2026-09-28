@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronRight, Users } from "lucide-react";
+import { ChevronRight, LayoutGrid, Users } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
 import { getT } from "@/lib/i18n/server";
 import { PageTitle } from "@/components/ui";
@@ -30,6 +30,19 @@ export default async function AccountPage() {
           <span className="flex-1">
             <span className="block font-semibold">{t("acc.team")}</span>
             <span className="block text-sm text-muted">{t("acc.teamHint")}</span>
+          </span>
+          <ChevronRight className="text-muted" />
+        </Link>
+      )}
+
+      {user.role === "ADMIN" && (
+        <Link href="/tables" className="card mb-4 flex items-center gap-3 p-4 transition hover:border-leaf/40">
+          <span className="grid size-10 place-items-center rounded-xl bg-gold-soft text-gold">
+            <LayoutGrid size={20} />
+          </span>
+          <span className="flex-1">
+            <span className="block font-semibold">{t("tables.manage")}</span>
+            <span className="block text-sm text-muted">{t("tables.manageHint")}</span>
           </span>
           <ChevronRight className="text-muted" />
         </Link>

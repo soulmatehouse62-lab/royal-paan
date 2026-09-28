@@ -1,25 +1,26 @@
 @import "tailwindcss";
 
-/* Royal Paan palette: warm cream, paan-leaf green (the signboard), rani pink
-   (the Hindi signboard) and a touch of gold. */
+/* Royal Paan palette, taken from the logo: cream seal, bronze ring/crown and the
+   black backdrop. Token names are historical: "leaf" is the primary (bronze) and
+   "rani" the accent (logo black). */
 @theme {
-  --color-cream: #fbf6ec;
-  --color-cream-deep: #f3eadb;
-  --color-card: #fffdf9;
-  --color-ink: #1f1a17;
-  --color-muted: #6e655c;
-  --color-line: #e9dfcd;
+  --color-cream: #f8f3e6;
+  --color-cream-deep: #efe6d2;
+  --color-card: #fffdf7;
+  --color-ink: #1a1510;
+  --color-muted: #6d6153;
+  --color-line: #e5d9c1;
 
-  --color-leaf: #1e5631;
-  --color-leaf-dark: #133b21;
-  --color-leaf-soft: #e5f0e7;
+  --color-leaf: #805821;
+  --color-leaf-dark: #5c3e15;
+  --color-leaf-soft: #f3e8d3;
 
-  --color-rani: #b0156c;
-  --color-rani-dark: #8a0f54;
-  --color-rani-soft: #fbe6f1;
+  --color-rani: #1a1510;
+  --color-rani-dark: #000000;
+  --color-rani-soft: #ece4d6;
 
-  --color-gold: #c7922f;
-  --color-gold-soft: #fbf1dc;
+  --color-gold: #b8862e;
+  --color-gold-soft: #faf1dc;
 
   --color-danger: #c0392b;
   --color-danger-soft: #fdecea;
@@ -161,10 +162,13 @@ dialog.sheet[open] {
     visibility: hidden;
   }
   #bill,
-  #bill * {
+  #bill *,
+  #kot,
+  #kot * {
     visibility: visible;
   }
-  #bill {
+  #bill,
+  #kot {
     position: absolute;
     left: 0;
     right: 0;

@@ -8,6 +8,7 @@ import { sizeName } from "@/lib/categories";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { itemNames } from "@/lib/i18n";
 import { StatusBadge } from "@/components/status-badge";
+import { BrandMark } from "@/components/brand-mark";
 
 export type ReceiptView = {
   orderNumber: number;
@@ -36,8 +37,9 @@ export function Receipt({ order, paymentActions }: { order: ReceiptView; payment
   const locale = useLocale();
   return (
     <article id="bill" className="card mx-auto w-full max-w-md px-5 py-6 font-sans">
-      <header className="border-b border-dashed border-line pb-4 text-center">
-        <h2 className="font-display text-xl font-semibold text-leaf-dark">{t("brand.name")}</h2>
+      <header className="flex flex-col items-center border-b border-dashed border-line pb-4 text-center">
+        <BrandMark size={72} />
+        <h2 className="mt-2 font-display text-xl font-semibold text-ink">{t("brand.name")}</h2>
         <p className="mt-0.5 text-xs text-muted">{t("brand.address")}</p>
       </header>
 

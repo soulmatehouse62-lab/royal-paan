@@ -38,7 +38,7 @@ async function menuUrl(): Promise<string> {
 
 export default async function QrPage() {
   const [, t, url] = await Promise.all([requireUser(), getT(), menuUrl()]);
-  const svg = await QRCode.toString(url, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#133b21", light: "#ffffff" } });
+  const svg = await QRCode.toString(url, { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#1a1510", light: "#ffffff" } });
 
   return (
     <div className="mx-auto max-w-sm space-y-4">

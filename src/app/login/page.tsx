@@ -17,19 +17,19 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (user) redirect(safeNext);
 
   return (
-    <main className="relative grid min-h-dvh place-items-center bg-[radial-gradient(ellipse_at_top,var(--color-leaf-soft),transparent_60%)] px-4 py-10">
+    <main className="relative grid min-h-dvh place-items-center bg-[radial-gradient(ellipse_at_top,#3a2a17,var(--color-rani)_65%)] px-4 py-10">
       <LangToggle className="absolute right-4 top-4" />
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <BrandMark size={64} />
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-leaf-dark">{t("brand.short")}</h1>
-          <p className="text-sm font-medium uppercase tracking-[0.16em] text-rani">{t("brand.tagline")}</p>
+          <BrandMark size={128} priority />
+          <h1 className="sr-only">{t("brand.name")}</h1>
+          <p className="mt-4 text-sm font-medium uppercase tracking-[0.16em] text-gold">{t("brand.tagline")}</p>
         </div>
         <div className="card p-6">
           <h2 className="mb-4 text-xl font-semibold">{t("login.title")}</h2>
           <LoginForm next={safeNext} />
         </div>
-        <p className="mt-5 text-center text-xs text-muted">{t("login.forgot")}</p>
+        <p className="mt-5 text-center text-xs text-white/60">{t("login.forgot")}</p>
       </div>
     </main>
   );

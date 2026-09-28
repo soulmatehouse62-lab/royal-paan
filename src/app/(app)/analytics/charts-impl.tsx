@@ -9,8 +9,8 @@ import { useLocale, useT } from "@/lib/i18n/client";
 export type ChartsProps = Pick<Analytics, "daily" | "methods"> & { categories: (Analytics["categories"][number] & { label: string })[] };
 
 // Validated pair (light surface): passes lightness, chroma, CVD ≥ 8 and contrast checks.
-const COLLECTED = "#2f7d4a";
-const OUTSTANDING = "#b3478f";
+const COLLECTED = "#805821";
+const OUTSTANDING = "#b5523b";
 const AXIS = { fontSize: 12, fill: "#6e655c" };
 const GRID = "#efe6d6";
 
@@ -63,7 +63,7 @@ export default function ChartsImpl({ daily, methods, categories }: ChartsProps) 
             <CartesianGrid vertical={false} stroke={GRID} />
             <XAxis dataKey="day" tickFormatter={tickDay} tick={AXIS} tickLine={false} axisLine={false} minTickGap={16} />
             <YAxis tickFormatter={compact} tick={AXIS} tickLine={false} axisLine={false} width={52} />
-            <Tooltip content={<MoneyTooltip labelFormat={tickDay} />} cursor={{ fill: "rgb(30 86 49 / 0.06)" }} />
+            <Tooltip content={<MoneyTooltip labelFormat={tickDay} />} cursor={{ fill: "rgb(128 88 33 / 0.08)" }} />
             <Bar dataKey="collected" name={t("chart.collected")} fill={COLLECTED} radius={[4, 4, 0, 0]} maxBarSize={36} />
           </BarChart>
         </ResponsiveContainer>
@@ -75,7 +75,7 @@ export default function ChartsImpl({ daily, methods, categories }: ChartsProps) 
             <CartesianGrid vertical={false} stroke={GRID} />
             <XAxis dataKey="day" tickFormatter={tickDay} tick={AXIS} tickLine={false} axisLine={false} minTickGap={16} />
             <YAxis tickFormatter={compact} tick={AXIS} tickLine={false} axisLine={false} width={52} />
-            <Tooltip content={<MoneyTooltip labelFormat={tickDay} />} cursor={{ fill: "rgb(30 86 49 / 0.06)" }} />
+            <Tooltip content={<MoneyTooltip labelFormat={tickDay} />} cursor={{ fill: "rgb(128 88 33 / 0.08)" }} />
             <Legend iconType="square" iconSize={10} wrapperStyle={{ fontSize: 13, color: "#1f1a17" }} />
             <Bar dataKey="collected" name={t("chart.collected")} fill={COLLECTED} radius={[4, 4, 0, 0]} maxBarSize={28} />
             <Bar dataKey="outstanding" name={t("chart.outstanding")} fill={OUTSTANDING} radius={[4, 4, 0, 0]} maxBarSize={28} />
@@ -89,7 +89,7 @@ export default function ChartsImpl({ daily, methods, categories }: ChartsProps) 
             <CartesianGrid horizontal={false} stroke={GRID} />
             <XAxis type="number" tickFormatter={compact} tick={AXIS} tickLine={false} axisLine={false} />
             <YAxis type="category" dataKey="label" tick={{ ...AXIS, fill: "#1f1a17" }} tickLine={false} axisLine={false} width={48} />
-            <Tooltip content={<MoneyTooltip />} cursor={{ fill: "rgb(30 86 49 / 0.06)" }} />
+            <Tooltip content={<MoneyTooltip />} cursor={{ fill: "rgb(128 88 33 / 0.08)" }} />
             <Bar
               dataKey="amount"
               name={t("chart.received")}
@@ -111,7 +111,7 @@ export default function ChartsImpl({ daily, methods, categories }: ChartsProps) 
               <CartesianGrid horizontal={false} stroke={GRID} />
               <XAxis type="number" tickFormatter={compact} tick={AXIS} tickLine={false} axisLine={false} />
               <YAxis type="category" dataKey="label" tick={{ ...AXIS, fill: "#1f1a17" }} tickLine={false} axisLine={false} width={92} />
-              <Tooltip content={<MoneyTooltip />} cursor={{ fill: "rgb(30 86 49 / 0.06)" }} />
+              <Tooltip content={<MoneyTooltip />} cursor={{ fill: "rgb(128 88 33 / 0.08)" }} />
               <Bar
                 dataKey="revenue"
                 name={t("chart.sales")}
