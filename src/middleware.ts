@@ -1,11 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE_NAMES } from "@/lib/auth/cookie";
 
+// The print agent has no session; these routes check its x-agent-key themselves.
+const PRINT_AGENT_ROUTE = /^\/api\/print-jobs\/(next|[a-f0-9]{24}\/done)\/?$/i;
+
 // Middleware only sends visitors without a session cookie to /login. The real
 // check (requireUser) runs in every page, server action and API route.
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   if (pathname === "/login" || pathname === "/m" || pathname.startsWith("/m/")) return NextResponse.next();
+  if (PRINT_AGENT_ROUTE.test(pathname)) return NextResponse.next();
 
   if (!SESSION_COOKIE_NAMES.some((n) => req.cookies.has(n))) {
     if (pathname.startsWith("/api/")) {
