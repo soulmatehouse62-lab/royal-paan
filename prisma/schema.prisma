@@ -305,12 +305,15 @@ model KOT {
   tableNumber String
   printedAt   DateTime  @default(now())
   isDuplicate Boolean   @default(false)
+  /// true while the KOT waits at the counter to be printed (older KOTs lack the field).
+  awaitingPrint Boolean?
   createdAt   DateTime  @default(now())
 
   items TableOrderItem[]
 
   @@index([tableOrderId])
   @@index([printedAt])
+  @@index([awaitingPrint])
   @@map("kots")
 }
 
@@ -334,26 +337,4 @@ model Bill {
   @@index([tableOrderId])
   @@index([printedAt])
   @@map("bills")
-}
-
-/// A ticket waiting for the shop laptop's print agent (print-agent/agent.js).
-/// type: "kot" | "bill" | "test"; status: "pending" | "printing" | "done" | "failed".
-/// The TTL index on expiresAt is created at runtime by ensurePrintJobIndexes(),
-/// because Prisma cannot declare TTL indexes.
-model PrintJob {
-  id         String    @id @default(auto()) @map("_id") @db.ObjectId
-  type       String
-  data       Json
-  status     String    @default("pending")
-  attempts   Int       @default(0)
-  error      String?
-  /// While "printing", the agent owns the job until this time; after it, the job is retried.
-  leaseUntil DateTime?
-  expiresAt  DateTime
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  /// Also serves status-only lookups (index prefix).
-  @@index([status, createdAt])
-  @@map("printjobs")
 }

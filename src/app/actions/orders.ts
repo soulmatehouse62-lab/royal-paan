@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireAdmin, requireUser } from "@/lib/auth/session";
 import { run } from "@/lib/action";
 import { isObjectId, ActionError } from "@/lib/db";
+import { maxDiscountPct } from "@/lib/pricing";
 import {
   addPayment,
   collectForCustomer,
@@ -27,8 +28,8 @@ function checkId(id: unknown): string {
 
 export async function createOrderAction(input: unknown) {
   return run(async () => {
-    await requireUser();
-    const receipt = await createOrder(createOrderSchema.parse(input));
+    const user = await requireUser();
+    const receipt = await createOrder(createOrderSchema.parse(input), maxDiscountPct(user.role));
     refreshAll();
     return receipt;
   });
@@ -36,9 +37,9 @@ export async function createOrderAction(input: unknown) {
 
 export async function updateOrderAction(input: unknown) {
   return run(async () => {
-    await requireUser();
+    const user = await requireUser();
     const data = updateOrderSchema.parse(input);
-    await updateOrder(data);
+    await updateOrder(data, maxDiscountPct(user.role));
     refreshAll();
     return data.orderId;
   });

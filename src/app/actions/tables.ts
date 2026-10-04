@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin, requireUser } from "@/lib/auth/session";
 import { run } from "@/lib/action";
 import { ActionError, isObjectId } from "@/lib/db";
+import { maxDiscountPct } from "@/lib/pricing";
 import {
   createTable,
   deleteTable,
   getSentLines,
+  deletePrintedKot,
   sendKot,
   sendKotSchema,
   settleTable,
@@ -39,10 +41,20 @@ export async function sendKotAction(input: unknown) {
   });
 }
 
-export async function settleTableAction(input: unknown) {
+export async function deletePrintedKotAction(id: string) {
   return run(async () => {
     await requireUser();
-    const receipt = await settleTable(settleTableSchema.parse(input));
+    if (!isObjectId(id)) throw new ActionError("err.generic");
+    await deletePrintedKot(id);
+    revalidatePath("/kots");
+    return null;
+  });
+}
+
+export async function settleTableAction(input: unknown) {
+  return run(async () => {
+    const user = await requireUser();
+    const receipt = await settleTable(settleTableSchema.parse(input), maxDiscountPct(user.role));
     refreshAll();
     return receipt;
   });

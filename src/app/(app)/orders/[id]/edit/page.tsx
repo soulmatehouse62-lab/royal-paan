@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { getReceipt } from "@/lib/orders";
 import { getMenu } from "@/lib/menu-data";
-import { formatOrderNumber } from "@/lib/pricing";
+import { formatOrderNumber, maxDiscountPct } from "@/lib/pricing";
 import { OrderBuilder } from "@/components/order/order-builder";
 import { PageTitle } from "@/components/ui";
 
@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   const [order, menu, t] = await Promise.all([getReceipt(id), getMenu(), getT()]);
   if (!order) notFound();
@@ -23,6 +23,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
       <PageTitle title={t("order.edit", { no: formatOrderNumber(order.orderNumber) })} subtitle={t("order.editSubtitle")} />
       <OrderBuilder
         menu={menu.filter((m) => m.isAvailable)}
+        maxDiscountPct={maxDiscountPct(user.role)}
         edit={{
           orderId: order.id,
           lines: order.items.map((it) => ({

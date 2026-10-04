@@ -5,7 +5,7 @@ import { formatDateTime } from "@/lib/time";
 import { sizeName } from "@/lib/categories";
 import { useLocale, useT } from "@/lib/i18n/client";
 
-/** Kitchen ticket: no prices. The element with id="kot" is the only thing printed. */
+/** Kitchen ticket: no prices. The element with id="kot" is the only thing printed. An empty tableNumber means takeaway; kotNumber 0 hides the number. */
 export function KotTicket({ kot }: { kot: KotTicketView }) {
   const t = useT();
   const locale = useLocale();
@@ -18,10 +18,10 @@ export function KotTicket({ kot }: { kot: KotTicketView }) {
       </header>
 
       <div className="grid grid-cols-2 gap-y-0.5 border-b border-dashed border-ink/40 py-3 text-sm">
-        <span className="font-bold">KOT #{String(kot.kotNumber).padStart(4, "0")}</span>
+        <span className="font-bold">{kot.kotNumber > 0 && `KOT #${String(kot.kotNumber).padStart(4, "0")}`}</span>
         <span className="text-right">{formatDateTime(kot.printedAt, locale)}</span>
-        <span className="text-lg font-bold">{t("common.table", { n: kot.tableNumber })}</span>
-        <span className="self-end text-right">{t("kot.staff", { name: kot.staffName })}</span>
+        <span className="text-lg font-bold">{kot.tableNumber ? t("common.table", { n: kot.tableNumber }) : t("tables.takeaway")}</span>
+        {kot.staffName && <span className="self-end text-right">{t("kot.staff", { name: kot.staffName })}</span>}
       </div>
 
       <table className="w-full border-b border-dashed border-ink/40 text-base">

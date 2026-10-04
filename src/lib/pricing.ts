@@ -1,5 +1,5 @@
 // Pure pricing rules shared by the server (authoritative) and the client (preview).
-import type { DiscountType, OrderStatus } from "@prisma/client";
+import type { DiscountType, OrderStatus, Role } from "@prisma/client";
 
 export type DiscountInput = { type: DiscountType; value: number } | null | undefined;
 
@@ -11,6 +11,15 @@ export function discountAmount(subtotal: number, discount: DiscountInput): numbe
       ? Math.round((subtotal * Math.min(discount.value, 100)) / 100)
       : Math.round(discount.value * 100);
   return Math.max(0, Math.min(raw, subtotal));
+}
+
+/** Highest discount, as % of the subtotal, a user may give: staff are capped, admins are not. */
+export const STAFF_MAX_DISCOUNT_PCT = 15;
+export const maxDiscountPct = (role: Role) => (role === "STAFF" ? STAFF_MAX_DISCOUNT_PCT : 100);
+
+/** True when the discount goes over maxPct % of the subtotal. */
+export function discountOverLimit(subtotal: number, amount: number, maxPct: number): boolean {
+  return maxPct < 100 && amount > Math.round((subtotal * maxPct) / 100);
 }
 
 /** Paid in full → PAID; paid something → PARTIAL; paid nothing → UNPAID. */

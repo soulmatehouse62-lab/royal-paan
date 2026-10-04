@@ -36,27 +36,27 @@ export function TablePicker({ tables, onPick }: { tables: PickerTable[]; onPick:
       {groups.map(({ area, tables: list }) => (
         <section key={area}>
           <h2 className="mb-3 font-sans text-xs font-semibold uppercase tracking-wide text-muted">{t(`tables.area.${area}`)}</h2>
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          <div className="grid grid-cols-5 gap-2 sm:grid-cols-8 lg:grid-cols-12">
             {list.map((tb) => (
               <button
                 key={tb.id}
                 type="button"
                 onClick={() => onPick(tb.tableNumber)}
-                className={`card flex aspect-square flex-col items-center justify-center gap-1 border-t-4 p-2 text-center transition hover:shadow-float active:scale-95 ${
+                className={`card flex aspect-square flex-col items-center justify-center gap-0.5 border-t-4 p-1.5 text-center transition hover:shadow-float active:scale-95 ${
                   tb.running ? "border-t-warn bg-warn-soft" : "border-t-ok"
                 }`}
               >
-                <span className="font-display text-3xl font-semibold leading-none text-ink">{tb.tableNumber}</span>
+                <span className="font-display text-xl font-semibold leading-none text-ink">{tb.tableNumber}</span>
                 {tb.running ? (
                   <>
-                    <span className="text-sm font-bold tabular-nums text-warn">{formatMoney(tb.running.subtotal)}</span>
-                    <span className="max-w-full truncate text-[11px] text-muted">
+                    <span className="text-xs font-bold tabular-nums text-warn">{formatMoney(tb.running.subtotal)}</span>
+                    <span className="max-w-full truncate text-[10px] text-muted">
                       {formatAge(tb.running.since, t)} · {tb.running.staffName.split(" ")[0]}
                     </span>
                   </>
                 ) : (
-                  <span className="flex items-center gap-1 text-xs text-muted">
-                    <Users size={12} /> {tb.capacity} · {t("tables.free")}
+                  <span className="flex items-center gap-0.5 text-[10px] text-muted">
+                    <Users size={10} /> {tb.capacity} · {t("tables.free")}
                   </span>
                 )}
               </button>

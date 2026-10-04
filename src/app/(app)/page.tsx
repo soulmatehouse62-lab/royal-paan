@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getMenu } from "@/lib/menu-data";
 import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/money";
+import { maxDiscountPct } from "@/lib/pricing";
 import { dayRange, greetingKey, toYmd } from "@/lib/time";
 import { getT } from "@/lib/i18n/server";
 import { NewOrderFlow } from "@/components/order/new-order-flow";
@@ -32,24 +33,24 @@ export default async function NewOrderPage() {
           <Link href="/menu" className="btn-primary btn-sm mt-3">{t("home.openMenu")}</Link>
         </Empty>
       ) : (
-        <NewOrderFlow menu={menu} tables={tables} />
+        <NewOrderFlow menu={menu} tables={tables} maxDiscountPct={maxDiscountPct(user.role)} />
       )}
     </>
   );
 }
 
 async function getPickerTables(): Promise<PickerTable[]> {
-  const tables = await prisma.table.findMany({
-    where: { isActive: true },
-    select: { id: true, tableNumber: true, name: true, capacity: true, area: true, activeOrderId: true },
-  });
-  const activeIds = tables.flatMap((tb) => (tb.activeOrderId ? [tb.activeOrderId] : []));
-  const running = activeIds.length
-    ? await prisma.tableOrder.findMany({
-        where: { id: { in: activeIds } },
-        select: { id: true, subtotal: true, createdAt: true, staff: { select: { name: true } } },
-      })
-    : [];
+  // Both in parallel: running orders are matched to tables by activeOrderId below.
+  const [tables, running] = await Promise.all([
+    prisma.table.findMany({
+      where: { isActive: true },
+      select: { id: true, tableNumber: true, name: true, capacity: true, area: true, activeOrderId: true },
+    }),
+    prisma.tableOrder.findMany({
+      where: { status: "RUNNING" },
+      select: { id: true, subtotal: true, createdAt: true, staff: { select: { name: true } } },
+    }),
+  ]);
   const byId = new Map(running.map((r) => [r.id, { subtotal: r.subtotal, since: r.createdAt, staffName: r.staff.name }]));
   return tables
     .map(({ activeOrderId, ...tb }) => ({ ...tb, running: (activeOrderId && byId.get(activeOrderId)) || null }))

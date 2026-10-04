@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma, withTransaction, ActionError, isObjectId, type Tx } from "@/lib/db";
 import { normalizePhone, phoneKey, isValidPhone, nameWords } from "@/lib/phone";
-import { discountAmount, totalsFromPayments, allocateOldestFirst, formatOrderNumber } from "@/lib/pricing";
+import { discountAmount, discountOverLimit, totalsFromPayments, allocateOldestFirst, formatOrderNumber } from "@/lib/pricing";
 import { formatMoney } from "@/lib/money";
 
 // ---------- Validation ----------
@@ -127,8 +127,10 @@ export async function priceNewLines(lines: z.infer<typeof newLine>[]): Promise<L
   return [...merged.values()];
 }
 
-function discountFields(subtotal: number, discount: CreateOrderInput["discount"]) {
+/** `maxPct` caps the discount as a % of the subtotal (staff accounts). */
+function discountFields(subtotal: number, discount: CreateOrderInput["discount"], maxPct: number) {
   const amount = discountAmount(subtotal, discount);
+  if (discountOverLimit(subtotal, amount, maxPct)) throw new ActionError("err.discountMax", { p: maxPct });
   const active = discount && discount.value > 0;
   return {
     discountType: active ? discount.type : null,
@@ -214,10 +216,10 @@ export const getReceipt = cache(async (id: string): Promise<Receipt | null> => {
 
 // ---------- Mutations ----------
 
-export async function createOrder(input: CreateOrderInput): Promise<Receipt> {
+export async function createOrder(input: CreateOrderInput, maxDiscountPct: number): Promise<Receipt> {
   const lines = await priceNewLines(input.items);
   const customer = customerFields(input);
-  const order = await withTransaction((tx) => insertOrder(tx, input, customer, lines));
+  const order = await withTransaction((tx) => insertOrder(tx, input, customer, lines, maxDiscountPct));
   await touchCustomer(customer.customerPhone, customer.customerName, order.createdAt);
   return order;
 }
@@ -228,9 +230,10 @@ export async function insertOrder(
   input: Pick<CreateOrderInput, "discount" | "payment">,
   customer: ReturnType<typeof customerFields>,
   lines: LineSnapshot[],
+  maxDiscountPct: number,
 ): Promise<Receipt> {
   const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0);
-  const discount = discountFields(subtotal, input.discount);
+  const discount = discountFields(subtotal, input.discount, maxDiscountPct);
   const total = subtotal - discount.discountAmount;
 
   let pay = 0;
@@ -264,7 +267,7 @@ export async function insertOrder(
   });
 }
 
-export async function updateOrder(input: UpdateOrderInput): Promise<void> {
+export async function updateOrder(input: UpdateOrderInput, maxDiscountPct: number): Promise<void> {
   const added = input.lines.filter((l): l is z.infer<typeof newLine> => "menuItemId" in l);
   const kept = input.lines.filter((l): l is { lineId: string; quantity: number } => "lineId" in l);
   const newLines = await priceNewLines(added);
@@ -288,7 +291,7 @@ export async function updateOrder(input: UpdateOrderInput): Promise<void> {
     let subtotal = newLines.reduce((s, l) => s + l.lineTotal, 0);
     for (const [id, qty] of keptQty) subtotal += existingById.get(id)!.unitPrice * qty;
 
-    const discount = discountFields(subtotal, input.discount);
+    const discount = discountFields(subtotal, input.discount, maxDiscountPct);
     const total = subtotal - discount.discountAmount;
     const paid = await paidSum(tx, input.orderId);
     if (total < paid) {

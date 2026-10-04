@@ -10,7 +10,7 @@ import { TablePicker, type PickerTable } from "./table-picker";
 
 type Picked = { table: string | null; sent: SentLine[] };
 
-export function NewOrderFlow({ menu, tables }: { menu: MenuEntry[]; tables: PickerTable[] }) {
+export function NewOrderFlow({ menu, tables, maxDiscountPct }: { menu: MenuEntry[]; tables: PickerTable[]; maxDiscountPct: number }) {
   const [picked, setPicked] = useState<Picked | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, startLoading] = useTransition();
@@ -50,6 +50,7 @@ export function NewOrderFlow({ menu, tables }: { menu: MenuEntry[]; tables: Pick
       fixedTable={tables.length > 0 ? (picked?.table ?? null) : undefined}
       initialSent={picked?.sent}
       onChangeTable={() => setPicked(null)}
+      maxDiscountPct={maxDiscountPct}
     />
   );
 }

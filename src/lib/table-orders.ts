@@ -135,20 +135,23 @@ const sentItemSelect = {
 
 export async function getSentLines(number: string): Promise<SentLine[]> {
   const table = await prisma.table.findUnique({ where: { tableNumber: number }, select: { activeOrderId: true } });
-  if (!table?.activeOrderId) return [];
+  return table?.activeOrderId ? sentLinesOf(table.activeOrderId) : [];
+}
+
+async function sentLinesOf(tableOrderId: string): Promise<SentLine[]> {
   const items = await prisma.tableOrderItem.findMany({
-    where: { tableOrderId: table.activeOrderId, status: "SENT_TO_KITCHEN" },
+    where: { tableOrderId, status: "SENT_TO_KITCHEN" },
     select: sentItemSelect,
     orderBy: { createdAt: "asc" },
   });
   return mergeSent(items).map(({ category: _c, ...l }) => l);
 }
 
-/** Record new items on the table's running order (opening one if needed) as a new KOT. */
+/** Record new items on the table's running order (opening one if needed) as a new KOT, queued for the counter to print. */
 export async function sendKot(input: z.infer<typeof sendKotSchema>, user: SessionUser) {
   const lines = await priceNewLines(input.items);
 
-  const kot = await withTransaction(async (tx) => {
+  const { kot, orderId } = await withTransaction(async (tx) => {
     const table = await claimTable(tx, input.tableNumber);
     if (!table.isActive) throw new ActionError("err.tableMissing");
 
@@ -165,7 +168,7 @@ export async function sendKot(input: z.infer<typeof sendKotSchema>, user: Sessio
       update: { seq: { increment: 1 } },
     });
     const kot = await tx.kOT.create({
-      data: { kotNumber: counter.seq, tableOrderId: orderId, printedBy: user.id, staffName: user.name, tableNumber: table.tableNumber },
+      data: { kotNumber: counter.seq, tableOrderId: orderId, printedBy: user.id, staffName: user.name, tableNumber: table.tableNumber, awaitingPrint: true },
       select: { id: true, kotNumber: true, printedAt: true },
     });
     await tx.tableOrderItem.createMany({
@@ -175,7 +178,7 @@ export async function sendKot(input: z.infer<typeof sendKotSchema>, user: Sessio
       where: { id: orderId },
       data: { subtotal: { increment: lines.reduce((s, l) => s + l.lineTotal, 0) } },
     });
-    return kot;
+    return { kot, orderId };
   });
 
   const ticket: KotTicketView = {
@@ -185,11 +188,46 @@ export async function sendKot(input: z.infer<typeof sendKotSchema>, user: Sessio
     staffName: user.name,
     items: lines.map((l) => ({ name: l.itemName, nameHi: l.itemNameHi, variantName: l.variantName, quantity: l.quantity })),
   };
-  return { ticket, sent: await getSentLines(input.tableNumber) };
+  return { ticket, sent: await sentLinesOf(orderId) };
+}
+
+export type CounterKot = KotTicketView & { id: string };
+
+/** KOTs waiting at the counter, oldest first. */
+export async function getWaitingKots(): Promise<CounterKot[]> {
+  const kots = await prisma.kOT.findMany({
+    where: { awaitingPrint: true },
+    orderBy: { kotNumber: "asc" },
+    take: 100,
+    select: {
+      id: true,
+      kotNumber: true,
+      printedAt: true,
+      tableNumber: true,
+      staffName: true,
+      items: { select: { itemName: true, itemNameHi: true, variantName: true, quantity: true }, orderBy: { createdAt: "asc" } },
+    },
+  });
+  return kots.map((k) => ({
+    id: k.id,
+    kotNumber: k.kotNumber,
+    printedAt: k.printedAt,
+    tableNumber: k.tableNumber,
+    staffName: k.staffName,
+    items: k.items.map((i) => ({ name: i.itemName, nameHi: i.itemNameHi, variantName: i.variantName, quantity: i.quantity })),
+  }));
+}
+
+/** A printed KOT is not kept. Its items stay on the table's running order for the bill. */
+export async function deletePrintedKot(id: string): Promise<void> {
+  await withTransaction(async (tx) => {
+    await tx.tableOrderItem.updateMany({ where: { kotId: id }, data: { kotId: null } });
+    await tx.kOT.deleteMany({ where: { id } });
+  });
 }
 
 /** Turn every KOT on the table into one bill, then free the table. */
-export async function settleTable(input: z.infer<typeof settleTableSchema>): Promise<Receipt> {
+export async function settleTable(input: z.infer<typeof settleTableSchema>, maxDiscountPct: number): Promise<Receipt> {
   const customer = customerFields(input);
 
   const order = await withTransaction(async (tx) => {
@@ -215,7 +253,7 @@ export async function settleTable(input: z.infer<typeof settleTableSchema>): Pro
       lineTotal: l.unitPrice * l.quantity,
     }));
 
-    const receipt = await insertOrder(tx, input, customer, lines);
+    const receipt = await insertOrder(tx, input, customer, lines, maxDiscountPct);
     await tx.tableOrder.update({
       where: { id: running },
       data: { status: "PAID", subtotal: receipt.subtotal, discountAmount: receipt.discountAmount, total: receipt.total, closedAt: new Date() },

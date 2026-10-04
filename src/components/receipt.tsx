@@ -7,8 +7,6 @@ import { formatOrderNumber } from "@/lib/pricing";
 import { sizeName } from "@/lib/categories";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { itemNames } from "@/lib/i18n";
-import { StatusBadge } from "@/components/status-badge";
-import { BrandMark } from "@/components/brand-mark";
 
 export type ReceiptView = {
   orderNumber: number;
@@ -29,84 +27,82 @@ export type ReceiptView = {
 };
 
 /**
- * Receipt-style bill. The element with id="bill" is the only thing printed.
- * `paymentActions` maps a payment id to an extra control (e.g. remove, for admins).
+ * Compact thermal-style bill. The element with id="bill" is the only thing printed.
+ * `paymentActions` maps a payment id to an extra control (e.g. remove, for admins);
+ * when given, the payments are listed on screen only.
  */
 export function Receipt({ order, paymentActions }: { order: ReceiptView; paymentActions?: Record<string, React.ReactNode> }) {
   const t = useT();
   const locale = useLocale();
+  const methods = [...new Set(order.payments.map((p) => t(`method.${p.method}` as const)))].join("/");
+  const rule = <div className="my-1.5 border-t border-dashed border-line print:my-1 print:border-black" />;
   return (
-    <article id="bill" className="card mx-auto w-full max-w-md px-5 py-6 font-sans">
-      <header className="flex flex-col items-center border-b border-dashed border-line pb-4 text-center">
-        <BrandMark size={72} />
-        <h2 className="mt-2 font-display text-xl font-semibold text-ink">{t("brand.name")}</h2>
-        <p className="mt-0.5 text-xs text-muted">{t("brand.address")}</p>
-      </header>
-
-      <div className="flex items-start justify-between gap-3 border-b border-dashed border-line py-3 text-sm">
-        <div>
-          <div className="font-display text-lg font-semibold">{t("receipt.bill", { no: formatOrderNumber(order.orderNumber) })}</div>
-          <div className="text-muted">{formatDateTime(order.createdAt, locale)}</div>
-          {order.tableNumber && <div className="text-muted">{t("common.table", { n: order.tableNumber })}</div>}
-        </div>
-        <div className="text-right">
-          <StatusBadge status={order.status} />
-          {order.customerName && <div className="mt-1 font-medium">{order.customerName}</div>}
-          {order.customerPhone && <div className="text-muted">{order.customerPhone}</div>}
-        </div>
+    <article id="bill" className="card mx-auto w-full max-w-md px-5 py-5 font-mono text-sm leading-snug text-ink print:text-[9pt] print:text-black">
+      <div className="text-center">
+        <div className="font-bold print:text-[10pt]">{t("brand.name")}</div>
+        <div className="text-xs print:text-[9pt]">{t("brand.address")}</div>
       </div>
-
-      <table className="w-full border-b border-dashed border-line text-sm">
+      {rule}
+      <div className="flex justify-between font-bold">
+        <span>{t("receipt.bill", { no: formatOrderNumber(order.orderNumber) })}</span>
+        <span>{t(`status.${order.status}` as const)}</span>
+      </div>
+      <div>
+        {formatDateTime(order.createdAt, locale)}
+        {order.tableNumber && <> • {t("common.table", { n: order.tableNumber })}</>}
+      </div>
+      {rule}
+      <table className="w-full">
         <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-muted">
-            <th className="py-2 font-semibold">{t("receipt.item")}</th>
-            <th className="py-2 text-center font-semibold">{t("receipt.qty")}</th>
-            <th className="py-2 text-right font-semibold">{t("receipt.amount")}</th>
+          <tr className="text-left uppercase">
+            <th className="font-bold">{t("receipt.item")}</th>
+            <th className="w-10 text-center font-bold">{t("receipt.qty")}</th>
+            <th className="w-20 text-right font-bold">{t("receipt.amount")}</th>
           </tr>
         </thead>
         <tbody>
-          {order.items.map((it) => {
-            const n = itemNames({ name: it.itemName, nameHi: it.itemNameHi }, locale);
-            return (
-              <tr key={it.id} className="align-top">
-                <td className="py-1.5 pr-2">
-                  <div className="font-medium">
-                    {n.primary}
-                    {it.variantName && <span className="text-muted"> · {sizeName(it.variantName, locale)}</span>}
-                  </div>
-                  <div className="text-xs text-muted">@ {formatMoney(it.unitPrice)}</div>
-                </td>
-                <td className="py-1.5 text-center tabular-nums">{it.quantity}</td>
-                <td className="py-1.5 text-right tabular-nums">{formatMoney(it.lineTotal)}</td>
-              </tr>
-            );
-          })}
+          {order.items.map((it) => (
+            <tr key={it.id} className="align-top">
+              <td className="pr-1 text-base font-bold print:text-[10.5pt]">
+                {itemNames({ name: it.itemName, nameHi: it.itemNameHi }, locale).primary}
+                {it.variantName && ` (${sizeName(it.variantName, locale)})`}
+              </td>
+              <td className="text-center">{it.quantity}</td>
+              <td className="text-right">{formatMoney(it.lineTotal)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
-
-      <dl className="space-y-1 py-3 text-sm tabular-nums">
-        <Row label={t("receipt.subtotal")} value={formatMoney(order.subtotal)} />
-        {order.discountAmount > 0 && (
-          <Row
-            label={order.discountType === "PERCENT" ? t("receipt.discountPct", { p: order.discountValue ?? 0 }) : t("receipt.discount")}
-            value={`− ${formatMoney(order.discountAmount)}`}
-          />
-        )}
-        <div className="flex items-baseline justify-between border-t border-line pt-2 text-base font-bold">
-          <dt>{t("receipt.total")}</dt>
-          <dd className="font-display text-xl">{formatMoney(order.total)}</dd>
+      {rule}
+      <div className="flex justify-between">
+        <span>{t("receipt.subtotal")}</span>
+        <span>{formatMoney(order.subtotal)}</span>
+      </div>
+      {order.discountAmount > 0 && (
+        <div className="flex justify-between">
+          <span>{order.discountType === "PERCENT" ? t("receipt.discountPct", { p: order.discountValue ?? 0 }) : t("receipt.discount")}</span>
+          <span>− {formatMoney(order.discountAmount)}</span>
         </div>
-        <Row label={t("receipt.paid")} value={formatMoney(order.amountPaid)} />
-        {order.balanceDue > 0 && (
-          <div className="flex justify-between font-bold text-danger">
-            <dt>{t("receipt.balance")}</dt>
-            <dd>{formatMoney(order.balanceDue)}</dd>
-          </div>
-        )}
-      </dl>
+      )}
+      {rule}
+      <div className="flex justify-between text-base font-bold print:text-[10pt]">
+        <span>
+          {t("receipt.total").toUpperCase()}
+          {methods && ` (${methods})`}
+        </span>
+        <span>{formatMoney(order.total)}</span>
+      </div>
+      {order.balanceDue > 0 && (
+        <div className="flex justify-between font-bold text-danger print:text-black">
+          <span>{t("receipt.balance")}</span>
+          <span>{formatMoney(order.balanceDue)}</span>
+        </div>
+      )}
+      {rule}
+      <div className="text-center">{t("receipt.thanks")}</div>
 
-      {order.payments.length > 0 && (
-        <div className="border-t border-dashed border-line pt-3 text-sm">
+      {paymentActions && order.payments.length > 0 && (
+        <div className="no-print mt-4 border-t border-line pt-3 font-sans">
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">{t("receipt.payments")}</div>
           <ul className="space-y-1">
             {order.payments.map((p) => (
@@ -116,24 +112,13 @@ export function Receipt({ order, paymentActions }: { order: ReceiptView; payment
                 </span>
                 <span className="flex items-center gap-2 tabular-nums">
                   {formatMoney(p.amount)}
-                  {paymentActions?.[p.id]}
+                  {paymentActions[p.id]}
                 </span>
               </li>
             ))}
           </ul>
         </div>
       )}
-
-      <p className="mt-5 text-center text-sm text-muted">{t("receipt.thanks")}</p>
     </article>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between">
-      <dt className="text-muted">{label}</dt>
-      <dd>{value}</dd>
-    </div>
   );
 }

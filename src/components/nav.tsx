@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChartColumn, History, Plus, ReceiptText, UserRound } from "lucide-react";
+import { BookOpen, ChartColumn, ChefHat, History, Plus, ReceiptText, UserRound } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
 
 const ITEMS = [
   { href: "/", label: "nav.newOrder", icon: Plus },
+  { href: "/kots", label: "nav.kots", icon: ChefHat },
   { href: "/dues", label: "nav.dues", icon: ReceiptText },
   { href: "/history", label: "nav.history", icon: History },
   { href: "/analytics", label: "nav.analytics", icon: ChartColumn },
@@ -70,8 +71,8 @@ export function BottomNav() {
   const pathname = usePathname();
   const t = useT();
   const [newOrder, ...rest] = ITEMS;
-  const left = rest.slice(0, 2);
-  const right = rest.slice(2);
+  const left = rest.slice(0, Math.ceil(rest.length / 2));
+  const right = rest.slice(left.length);
   const tab = ({ href, label, icon: Icon }: (typeof ITEMS)[number]) => {
     const active = isActive(pathname, href);
     return (

@@ -8,7 +8,7 @@ import type { DiscountType, OrderStatus, PaymentMethod } from "@prisma/client";
 import type { MenuEntry } from "@/lib/menu-data";
 import type { KotTicketView, SentLine } from "@/lib/table-orders";
 import { formatMoney, parseRupees } from "@/lib/money";
-import { discountAmount } from "@/lib/pricing";
+import { discountAmount, discountOverLimit } from "@/lib/pricing";
 import { createOrderAction, updateOrderAction } from "@/app/actions/orders";
 import { sendKotAction, settleTableAction } from "@/app/actions/tables";
 import { MethodPicker } from "@/components/method-picker";
@@ -50,9 +50,11 @@ type Props = {
   /** Items already sent to the kitchen for this table. */
   initialSent?: SentLine[];
   onChangeTable?: () => void;
+  /** Highest discount this user may give, as % of the subtotal (the server checks it too). */
+  maxDiscountPct: number;
 };
 
-export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTable }: Props) {
+export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTable, maxDiscountPct }: Props) {
   const router = useRouter();
   const t = useT();
   const locale = useLocale();
@@ -72,6 +74,10 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
   const [cashGiven, setCashGiven] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<(ReceiptView & { id: string }) | null>(null);
+  // Which ticket the saved-order screen sends to the printer; a new object re-triggers printing.
+  const [printing, setPrinting] = useState<{ what: "bill" | "kot" } | null>(null);
+  // Takeaway: a kitchen ticket for the unsaved bill, printed from the order screen.
+  const [draftKot, setDraftKot] = useState<(KotTicketView & { sig: string }) | null>(null);
   const [pending, startTransition] = useTransition();
 
   const add = useCallback((item: MenuEntry, variantName: string | null) => {
@@ -120,17 +126,21 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
     setCashGiven("");
     setError(null);
     setSaved(null);
+    setPrinting(null);
+    setDraftKot(null);
     window.scrollTo({ top: 0 });
     onChangeTable?.();
   }
 
   function validate(): string | null {
+    if (kotPending) return t("kot.printFirst");
     if (dineIn) {
       if (lines.length > 0) return t("kot.sendFirst");
       if (sent.length === 0) return t("err.addItem");
     } else if (lines.length === 0) return t("err.addItem");
     if (discountInput.trim() && (!(discountValue >= 0) || Number.isNaN(Number(discountInput)))) return t("bill.validDiscount");
     if (discountType === "PERCENT" && discountValue > 100) return t("err.percentMax");
+    if (discountOverLimit(subtotal, discountPaise, maxDiscountPct)) return t("err.discountMax", { p: maxDiscountPct });
     if (!edit && status === "PARTIAL") {
       if (!partialPaise || partialPaise <= 0) return t("err.enterPaid");
       if (partialPaise > total) return t("bill.paidOverTotal");
@@ -190,12 +200,33 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
     });
   }
 
-  // Print the kitchen ticket as soon as it is on screen.
+  // Saved order: print the bill or the takeaway KOT once the chosen one is rendered for print.
   useEffect(() => {
-    if (!kot) return;
+    if (!printing) return;
     const id = requestAnimationFrame(() => window.print());
     return () => cancelAnimationFrame(id);
-  }, [kot]);
+  }, [printing]);
+
+  useEffect(() => {
+    if (!draftKot) return;
+    const id = requestAnimationFrame(() => window.print());
+    return () => cancelAnimationFrame(id);
+  }, [draftKot]);
+
+  // Takeaway: the bill can be saved only after a KOT is printed for exactly these items.
+  const linesSig = lines.map((l) => `${l.key}:${l.quantity}`).join(",");
+  const kotPending = !edit && !dineIn && lines.length > 0 && draftKot?.sig !== linesSig;
+
+  function printDraftKot() {
+    setDraftKot({
+      sig: linesSig,
+      kotNumber: 0,
+      printedAt: new Date(),
+      tableNumber: table.trim(),
+      staffName: "",
+      items: lines.map((l) => ({ name: l.name, nameHi: l.nameHi, variantName: l.variantName, quantity: l.quantity })),
+    });
+  }
 
   // Mobile: a floating bill summary that scrolls down to the bill.
   const billRef = useRef<HTMLDivElement>(null);
@@ -212,9 +243,29 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
     return (
       <div className="mx-auto max-w-md space-y-4">
         <div className="no-print rounded-2xl bg-ok-soft px-4 py-3 text-center font-semibold text-ok">{t("bill.saved")}</div>
-        <Receipt order={saved} />
+        <div className={printing?.what === "kot" ? "print:hidden" : ""}>
+          <Receipt order={saved} />
+        </div>
+        {!dineIn && (
+          <div className={printing?.what === "kot" ? "hidden print:block" : "hidden"}>
+            <KotTicket
+              kot={{
+                kotNumber: saved.orderNumber,
+                printedAt: new Date(),
+                tableNumber: saved.tableNumber ?? "",
+                staffName: "",
+                items: saved.items.map((it) => ({ name: it.itemName, nameHi: it.itemNameHi ?? null, variantName: it.variantName, quantity: it.quantity })),
+              }}
+            />
+          </div>
+        )}
         <div className="no-print grid grid-cols-2 gap-2.5">
-          <button type="button" className="btn-ghost" onClick={() => window.print()}>
+          {!dineIn && (
+            <button type="button" className="btn-ghost col-span-2" onClick={() => setPrinting({ what: "kot" })}>
+              <ChefHat size={18} /> {t("kot.print")}
+            </button>
+          )}
+          <button type="button" className="btn-ghost" onClick={() => setPrinting({ what: "bill" })}>
             <Printer size={18} /> {t("common.printBill")}
           </button>
           <Link href={`/orders/${saved.id}`} className="btn-ghost">
@@ -234,12 +285,11 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
         <div className="no-print flex items-center justify-center gap-2 rounded-2xl bg-ok-soft px-4 py-3 text-center font-semibold text-ok">
           <ChefHat size={20} /> {t("kot.sent", { no: String(kot.kotNumber).padStart(4, "0") })}
         </div>
-        <KotTicket kot={kot} />
+        <div className="print:hidden">
+          <KotTicket kot={kot} />
+        </div>
         <div className="no-print grid grid-cols-2 gap-2.5">
-          <button type="button" className="btn-ghost" onClick={() => window.print()}>
-            <Printer size={18} /> {t("kot.printAgain")}
-          </button>
-          <button type="button" className="btn-ghost" onClick={() => setKot(null)}>
+          <button type="button" className="btn-ghost col-span-2" onClick={() => setKot(null)}>
             <Plus size={18} /> {t("kot.addMore")}
           </button>
           <button type="button" className="btn-accent col-span-2 h-14 text-base" onClick={onChangeTable} autoFocus>
@@ -252,6 +302,11 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
 
   return (
     <>
+    {draftKot && (
+      <div className="hidden print:block">
+        <KotTicket kot={draftKot} />
+      </div>
+    )}
     {fixedTable !== undefined && (
       <div className="mb-4 flex items-center justify-between gap-3 rounded-card border border-gold/40 bg-gold-soft px-4 py-3">
         <div className="flex items-center gap-3">
@@ -346,7 +401,10 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
           <CustomerFields phone={phone} name={name} table={table} onPhone={setPhone} onName={setName} onTable={setTable} showTable={fixedTable === undefined} />
 
           <div>
-            <span className="label">{t("bill.discount")}</span>
+            <span className="label">
+              {t("bill.discount")}
+              {maxDiscountPct < 100 && <span className="font-normal text-muted"> · max {maxDiscountPct}%</span>}
+            </span>
             <div className="flex gap-2">
               <div className="flex rounded-xl border border-line bg-white p-1">
                 {(["FLAT", "PERCENT"] as const).map((dt) => (
@@ -473,10 +531,17 @@ export function OrderBuilder({ menu, edit, fixedTable, initialSent, onChangeTabl
                 {t("kot.send", { n: newCount })}
               </button>
             ) : (
-              <button type="button" onClick={save} disabled={pending || (lines.length === 0 && sent.length === 0)} className="btn-primary h-14 flex-[2] text-base">
+              <>
+              {!edit && !dineIn && lines.length > 0 && (
+                <button type="button" onClick={printDraftKot} className={`${kotPending ? "btn-accent" : "btn-ghost"} h-14 flex-1 text-base`}>
+                  <ChefHat size={20} /> {t("kot.print")}
+                </button>
+              )}
+              <button type="button" onClick={save} disabled={pending || kotPending || (lines.length === 0 && sent.length === 0)} className="btn-primary h-14 flex-[2] text-base">
                 {pending && <LoaderCircle size={18} className="animate-spin" />}
                 {edit ? t("bill.saveChanges") : t("bill.save", { amount: formatMoney(total) })}
               </button>
+              </>
             )}
           </div>
         </div>
