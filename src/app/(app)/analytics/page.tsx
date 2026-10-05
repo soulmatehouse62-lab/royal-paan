@@ -3,7 +3,7 @@ import { getT } from "@/lib/i18n/server";
 import { itemNames } from "@/lib/i18n";
 import { categoryLabel, sizeName } from "@/lib/categories";
 import Link from "next/link";
-import { requireUser } from "@/lib/auth/session";
+import { requireAdminPage } from "@/lib/auth/session";
 import { defaultCustomRange, getAnalytics, resolvePeriod, MAX_RANGE_DAYS } from "@/lib/analytics";
 import { formatMoney } from "@/lib/money";
 import { formatAge, formatYmdShort } from "@/lib/time";
@@ -30,7 +30,7 @@ function itemLabel(r: { name: string; nameHi: string | null; size: string | null
 }
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const [, t, sp] = await Promise.all([requireUser(), getT(), searchParams]);
+  const [, t, sp] = await Promise.all([requireAdminPage(), getT(), searchParams]);
   const locale = t.locale;
   const { period, from, to, error } = resolvePeriod(sp);
   const data = await getAnalytics(from, to);

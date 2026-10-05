@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/" aria-label={t("nav.home")} className="min-w-0">
             <BrandLockup short={t("brand.short")} tagline={t("brand.tagline")} />
           </Link>
-          <PillNav />
+          <PillNav isAdmin={user.role === "ADMIN"} />
           <div className="flex shrink-0 items-center gap-2">
             <LangToggle />
             <AccountLink name={user.name} />
@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 pb-32 pt-5 md:pb-12">{children}</main>
-      <BottomNav />
+      <BottomNav isAdmin={user.role === "ADMIN"} />
     </>
   );
 }

@@ -10,7 +10,7 @@ const ITEMS = [
   { href: "/kots", label: "nav.kots", icon: ChefHat },
   { href: "/dues", label: "nav.dues", icon: ReceiptText },
   { href: "/history", label: "nav.history", icon: History },
-  { href: "/analytics", label: "nav.analytics", icon: ChartColumn },
+  { href: "/analytics", label: "nav.analytics", icon: ChartColumn, adminOnly: true },
   { href: "/menu", label: "nav.menu", icon: BookOpen },
 ] as const;
 
@@ -20,13 +20,16 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+/** Nav entries this user may open: admin-only pages are hidden from staff. */
+const itemsFor = (isAdmin: boolean) => ITEMS.filter((it) => isAdmin || !("adminOnly" in it));
+
 /** Desktop: pill nav in the header. */
-export function PillNav() {
+export function PillNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const t = useT();
   return (
     <nav className="hidden items-center gap-1 rounded-full border border-line bg-white/70 p-1 md:flex" aria-label={t("nav.main")}>
-      {ITEMS.map(({ href, label, icon: Icon }) => {
+      {itemsFor(isAdmin).map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link
@@ -67,10 +70,10 @@ export function AccountLink({ name }: { name: string }) {
 }
 
 /** Mobile: floating bottom bar with a prominent central New order button. */
-export function BottomNav() {
+export function BottomNav({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const t = useT();
-  const [newOrder, ...rest] = ITEMS;
+  const [newOrder, ...rest] = itemsFor(isAdmin);
   const left = rest.slice(0, Math.ceil(rest.length / 2));
   const right = rest.slice(left.length);
   const tab = ({ href, label, icon: Icon }: (typeof ITEMS)[number]) => {
