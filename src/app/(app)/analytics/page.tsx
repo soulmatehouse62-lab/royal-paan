@@ -79,6 +79,29 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         <Stat label={t("an.avg")} value={formatMoney(data.avgOrder)} tone="gold" />
       </section>
 
+      <section className="card mb-5 p-4" aria-label={t("an.profit")}>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">{t("an.profit")}</h2>
+          <Link href="/kirana" className="btn-ghost btn-sm">{t("an.manageExpenses")}</Link>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <Stat label={t("an.collected")} value={formatMoney(data.collected)} />
+          <Stat label={t("an.expenses")} value={formatMoney(data.expenses)} tone="gold" />
+          <Stat label={t("an.profit")} value={formatMoney(data.profit)} tone={data.profit < 0 ? "danger" : "leaf"} />
+        </div>
+        {data.expenseByCategory.length > 0 && (
+          <ul className="mt-3 divide-y divide-line text-sm">
+            {data.expenseByCategory.map((r) => (
+              <li key={r.category} className="flex justify-between py-1.5">
+                <span>{t(`kirana.cat.${r.category}`)}</span>
+                <span className="font-semibold tabular-nums">{formatMoney(r.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-xs text-muted">{t("an.profitHint")}</p>
+      </section>
+
       <Charts daily={data.daily} methods={data.methods} categories={data.categories.map((c) => ({ ...c, label: categoryLabel(c.category, locale) }))} />
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">

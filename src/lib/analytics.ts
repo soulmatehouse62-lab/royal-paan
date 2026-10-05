@@ -35,7 +35,7 @@ export async function getAnalytics(from: string, to: string) {
   const range = { $gte: dateArg(start), $lt: dateArg(end) };
   const day = (field: string) => ({ $dateToString: { format: "%Y-%m-%d", date: `$${field}`, timezone: TIME_ZONE } });
 
-  const [payRaw, orderRaw, itemRaw, debtRaw] = await Promise.all([
+  const [payRaw, orderRaw, itemRaw, debtRaw, expenseRows] = await Promise.all([
     // Revenue collected = payments received in the period (whenever the order was placed).
     prisma.payment.aggregateRaw({
       pipeline: [
@@ -96,6 +96,8 @@ export async function getAnalytics(from: string, to: string) {
         { $limit: 10 },
       ],
     }),
+    // Kirana expenses; spentOn is local midnight, so the day range matches exactly.
+    prisma.expense.groupBy({ by: ["category"], where: { spentOn: { gte: start, lt: end } }, _sum: { amount: true } }),
   ]);
 
   const pay = (payRaw as unknown as Row[])[0] as { total: Row[]; byDay: Row[]; byMethod: Row[] };
@@ -140,8 +142,16 @@ export async function getAnalytics(from: string, to: string) {
     oldest: ejsonDate(r.oldest).toISOString(),
   }));
 
+  const expenseByCategory = expenseRows
+    .map((r) => ({ category: r.category, amount: r._sum.amount ?? 0 }))
+    .sort((a, b) => b.amount - a.amount);
+  const expenses = expenseByCategory.reduce((s, r) => s + r.amount, 0);
+
   return {
     collected,
+    expenses,
+    expenseByCategory,
+    profit: collected - expenses,
     outstanding,
     orders,
     avgOrder: orders ? Math.round(billed / orders) : 0,
