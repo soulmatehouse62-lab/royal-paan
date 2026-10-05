@@ -338,3 +338,34 @@ model Bill {
   @@index([printedAt])
   @@map("bills")
 }
+
+enum ExpenseCategory {
+  RATION
+  GAS
+  STAFF_ADVANCE
+  OTHER
+}
+
+/// Kirana / shop expenses entered by an admin: ration, gas, staff salary advances…
+model Expense {
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  category      ExpenseCategory
+  /// Paise.
+  amount        Int
+  note          String?
+  method        PaymentMethod   @default(CASH)
+  /// Local midnight (Asia/Kolkata) of the day the money was spent.
+  spentOn       DateTime
+  /// For STAFF_ADVANCE: who got the advance. The name is a snapshot.
+  staffId       String?         @db.ObjectId
+  staffName     String?
+  createdById   String          @db.ObjectId
+  createdByName String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([spentOn])
+  @@index([category, spentOn])
+  @@index([staffId, spentOn])
+  @@map("expenses")
+}

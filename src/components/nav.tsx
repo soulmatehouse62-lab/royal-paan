@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ChartColumn, ChefHat, History, Plus, ReceiptText, UserRound } from "lucide-react";
+import { BookOpen, ChartColumn, ChefHat, History, Plus, ReceiptText, ShoppingBasket, UserRound } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
 
 const ITEMS = [
@@ -12,6 +12,7 @@ const ITEMS = [
   { href: "/history", label: "nav.history", icon: History },
   { href: "/analytics", label: "nav.analytics", icon: ChartColumn, adminOnly: true },
   { href: "/menu", label: "nav.menu", icon: BookOpen },
+  { href: "/kirana", label: "nav.kirana", icon: ShoppingBasket, adminOnly: true },
 ] as const;
 
 function isActive(pathname: string, href: string) {
