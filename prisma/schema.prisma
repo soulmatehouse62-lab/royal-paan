@@ -341,24 +341,40 @@ model Bill {
 
 enum ExpenseCategory {
   RATION
+  VEGETABLES
+  DAIRY
   GAS
   STAFF_ADVANCE
+  SALARY
+  ELECTRICITY
+  RENT
   OTHER
+}
+
+/// One bought item inside an expense, e.g. { name: "Atta", qty: 10, unit: "kg", amount: 40000 }.
+type ExpenseItem {
+  name   String
+  qty    Float?
+  unit   String?
+  /// Line total in paise.
+  amount Int
 }
 
 /// Kirana / shop expenses entered by an admin: ration, gas, staff salary advances…
 model Expense {
   id            String          @id @default(auto()) @map("_id") @db.ObjectId
   category      ExpenseCategory
-  /// Paise.
+  /// Paise. When items are given, this is their sum.
   amount        Int
+  items         ExpenseItem[]
   note          String?
   method        PaymentMethod   @default(CASH)
   /// Local midnight (Asia/Kolkata) of the day the money was spent.
   spentOn       DateTime
-  /// For STAFF_ADVANCE: who got the advance. The name is a snapshot.
-  staffId       String?         @db.ObjectId
+  /// For STAFF_ADVANCE / SALARY: who was paid, typed by the admin.
   staffName     String?
+  /// Old entries picked a team account; new ones leave this empty.
+  staffId       String?         @db.ObjectId
   createdById   String          @db.ObjectId
   createdByName String
   createdAt     DateTime        @default(now())
@@ -366,6 +382,6 @@ model Expense {
 
   @@index([spentOn])
   @@index([category, spentOn])
-  @@index([staffId, spentOn])
+  @@index([staffName, spentOn])
   @@map("expenses")
 }
