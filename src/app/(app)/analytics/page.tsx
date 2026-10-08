@@ -4,9 +4,9 @@ import { itemNames } from "@/lib/i18n";
 import { categoryLabel, sizeName } from "@/lib/categories";
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/auth/session";
-import { defaultCustomRange, getAnalytics, resolvePeriod, MAX_RANGE_DAYS } from "@/lib/analytics";
+import { defaultCustomRange, getAnalytics, resolvePeriod, MAX_RANGE_DAYS, type Range } from "@/lib/analytics";
 import { formatMoney } from "@/lib/money";
-import { formatAge, formatYmdShort } from "@/lib/time";
+import { formatAge, formatHm, formatYmdShort } from "@/lib/time";
 import { categoryStyle } from "@/lib/categories";
 import type { Locale } from "@/lib/i18n";
 import { PageTitle, Stat } from "@/components/ui";
@@ -23,6 +23,20 @@ const PERIODS = [
   { value: "custom", label: "an.custom" },
 ] as const;
 
+/** 60 → "1:00 am" in the viewer's language. */
+function formatClock(mins: number, locale: Locale) {
+  const d = new Date(Date.UTC(1970, 0, 1, Math.floor(mins / 60), mins % 60));
+  return new Intl.DateTimeFormat(locale === "hi" ? "hi-IN" : "en-IN", { timeZone: "UTC", hour: "numeric", minute: "2-digit", hour12: true }).format(d);
+}
+
+/** "8 Oct, 1:00 am – 8 Oct, 4:35 pm" */
+function rangeLabel(r: Range, locale: Locale) {
+  return `${formatYmdShort(r.from, locale)}, ${formatClock(r.fromTime, locale)} – ${formatYmdShort(r.to, locale)}, ${formatClock(r.toTime, locale)}`;
+}
+
+const customHref = (r: Range) =>
+  `/analytics?period=custom&from=${r.from}&ftime=${formatHm(r.fromTime)}&to=${r.to}&ttime=${formatHm(r.toTime)}`;
+
 /** "Masala Chai · Large" in the viewer's language. */
 function itemLabel(r: { name: string; nameHi: string | null; size: string | null }, locale: Locale) {
   const name = itemNames(r, locale).primary;
@@ -32,21 +46,19 @@ function itemLabel(r: { name: string; nameHi: string | null; size: string | null
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const [, t, sp] = await Promise.all([requireAdminPage(), getT(), searchParams]);
   const locale = t.locale;
-  const { period, from, to, error } = resolvePeriod(sp);
-  const data = await getAnalytics(from, to);
-  const custom = period === "custom" && !error ? { from, to } : defaultCustomRange();
-  const rangeLabel = from === to ? formatYmdShort(from, locale) : `${formatYmdShort(from, locale)} – ${formatYmdShort(to, locale)}`;
+  const { period, range, error } = resolvePeriod(sp);
+  const data = await getAnalytics(range);
 
   return (
     <>
-      <PageTitle title={t("an.title")} subtitle={rangeLabel} />
+      <PageTitle title={t("an.title")} subtitle={rangeLabel(range, locale)} />
 
       <div className="mb-4 space-y-3">
         <nav className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4" aria-label={t("an.period")}>
           {PERIODS.map((p) => (
             <Link
               key={p.value}
-              href={p.value === "custom" ? `/analytics?period=custom&from=${custom.from}&to=${custom.to}` : `/analytics?period=${p.value}`}
+              href={p.value === "custom" ? customHref(period === "custom" ? range : defaultCustomRange()) : `/analytics?period=${p.value}`}
               aria-current={period === p.value ? "page" : undefined}
               className={`chip ${period === p.value ? "border-leaf bg-leaf text-white" : "border-line bg-white text-muted hover:text-ink"}`}
             >
@@ -54,21 +66,28 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             </Link>
           ))}
         </nav>
-        {period === "custom" && (
-          <form method="get" className="card flex flex-wrap items-end gap-3 p-3">
-            <input type="hidden" name="period" value="custom" />
-            <div className="flex-1">
-              <label htmlFor="from" className="label">{t("an.from")}</label>
-              <input id="from" name="from" type="date" defaultValue={custom.from} className="input" required />
-            </div>
-            <div className="flex-1">
-              <label htmlFor="to" className="label">{t("an.to")}</label>
-              <input id="to" name="to" type="date" defaultValue={custom.to} className="input" required />
-            </div>
-            <button className="btn-primary">{t("an.show")}</button>
-            <p className="w-full text-xs text-muted">{t("an.maxDays", { n: MAX_RANGE_DAYS })}</p>
-          </form>
-        )}
+        {/* Always visible: the presets fill it in, and any date or time can be changed. */}
+        <form method="get" className="card grid grid-cols-2 items-end gap-3 p-3 sm:flex sm:flex-wrap">
+          <input type="hidden" name="period" value="custom" />
+          <div className="sm:flex-1">
+            <label htmlFor="from" className="label">{t("an.from")}</label>
+            <input id="from" name="from" type="date" defaultValue={range.from} className="input" required />
+          </div>
+          <div className="sm:flex-1">
+            <label htmlFor="ftime" className="label">{t("an.time")}</label>
+            <input id="ftime" name="ftime" type="time" defaultValue={formatHm(range.fromTime)} className="input" required />
+          </div>
+          <div className="sm:flex-1">
+            <label htmlFor="to" className="label">{t("an.to")}</label>
+            <input id="to" name="to" type="date" defaultValue={range.to} className="input" required />
+          </div>
+          <div className="sm:flex-1">
+            <label htmlFor="ttime" className="label">{t("an.time")}</label>
+            <input id="ttime" name="ttime" type="time" defaultValue={formatHm(range.toTime)} className="input" required />
+          </div>
+          <button className="btn-primary col-span-2">{t("an.show")}</button>
+          <p className="col-span-2 w-full text-xs text-muted">{t("an.rangeHint", { n: MAX_RANGE_DAYS })}</p>
+        </form>
         {error && <p role="alert" className="rounded-xl bg-danger-soft px-3.5 py-2.5 text-sm font-medium text-danger">{t(error, { n: MAX_RANGE_DAYS })} {t("an.showingToday")}</p>}
       </div>
 

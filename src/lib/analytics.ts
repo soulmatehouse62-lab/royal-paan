@@ -1,39 +1,73 @@
 import "server-only";
 import { prisma, num, dateArg, ejsonDate } from "@/lib/db";
-import { TIME_ZONE, addDays, dayRange, daysBetween, eachDay, isYmd, startOfMonth, startOfWeek, toYmd } from "@/lib/time";
+import { TIME_ZONE, addDays, atTime, businessYmd, dayRange, eachDay, isYmd, minutesOfDay, parseHm, startOfMonth, startOfWeek, toYmd } from "@/lib/time";
 
 export type Period = "today" | "week" | "month" | "custom";
 export const MAX_RANGE_DAYS = 366;
+/** The shop closes after midnight, so ranges start at 1:00 AM unless a time is picked. */
+export const DEFAULT_FROM_TIME = 60;
+
+/** A date-time range in local time; times are minutes after midnight, `to` includes its whole minute. */
+export type Range = { from: string; fromTime: number; to: string; toTime: number };
+
+/** Preset ranges run from 1:00 AM on their first day until now. */
+function presetRange(period: Exclude<Period, "custom">): Range {
+  const now = new Date();
+  const base = businessYmd(DEFAULT_FROM_TIME, now); // before 1:00 AM, "today" is still yesterday
+  const from = period === "week" ? startOfWeek(base) : period === "month" ? startOfMonth(base) : base;
+  return { from, fromTime: DEFAULT_FROM_TIME, to: toYmd(now), toTime: minutesOfDay(now) };
+}
+
+/** Suggested custom range: the last 30 days, from 1:00 AM until now. */
+export function defaultCustomRange(): Range {
+  const today = presetRange("today");
+  return { ...today, from: addDays(today.from, -29) };
+}
 
 export function resolvePeriod(sp: Record<string, string | string[] | undefined>) {
   const pick = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : (sp[k] as string | undefined));
-  const today = toYmd();
-  let period = (pick("period") as Period) || "today";
-  let from = today;
-  let to = today;
+  let period = pick("period") as Period;
   let error: "an.errPick" | "an.errOrder" | "an.errRange" | null = null;
+  let range: Range;
 
-  if (period === "week") from = startOfWeek(today);
-  else if (period === "month") from = startOfMonth(today);
-  else if (period === "custom") {
+  if (period === "custom") {
     const f = pick("from");
     const t = pick("to");
+    const fromTime = parseHm(pick("ftime")) ?? DEFAULT_FROM_TIME;
+    const toTime = parseHm(pick("ttime")) ?? 23 * 60 + 59;
+    range = { from: f!, fromTime, to: t!, toTime };
     if (!isYmd(f) || !isYmd(t)) error = "an.errPick";
-    else if (f > t) error = "an.errOrder";
-    else if (daysBetween(f, t) + 1 > MAX_RANGE_DAYS) error = "an.errRange";
-    else [from, to] = [f, t];
-    if (error) from = to = today;
-  } else period = "today";
+    else {
+      const { start, end } = rangeBounds(range);
+      if (start >= end) error = "an.errOrder";
+      else if (end.getTime() - start.getTime() > MAX_RANGE_DAYS * 86_400_000) error = "an.errRange";
+    }
+    if (error) range = presetRange("today");
+  } else {
+    if (period !== "week" && period !== "month") period = "today";
+    range = presetRange(period);
+  }
 
-  return { period, from, to, error };
+  return { period, range, error };
+}
+
+/** Half-open UTC bounds [start, end) of a range. */
+export function rangeBounds(r: Range) {
+  return { start: atTime(r.from, r.fromTime), end: atTime(r.to, r.toTime + 1) };
 }
 
 type Row = Record<string, unknown>;
 
-export async function getAnalytics(from: string, to: string) {
-  const { start, end } = dayRange(from, to);
+export async function getAnalytics(r: Range) {
+  const { start, end } = rangeBounds(r);
   const range = { $gte: dateArg(start), $lt: dateArg(end) };
-  const day = (field: string) => ({ $dateToString: { format: "%Y-%m-%d", date: `$${field}`, timezone: TIME_ZONE } });
+  // Daily buckets start at the "from" time, so with 1:00 AM a 12:30 AM sale counts in the day before.
+  const shift = r.fromTime;
+  const day = (field: string) => ({
+    $dateToString: { format: "%Y-%m-%d", date: { $subtract: [`$${field}`, shift * 60_000] }, timezone: TIME_ZONE },
+  });
+  // Expenses are stored by date (local midnight), so they use the calendar dates of the range.
+  const expenseDays = dayRange(r.from, r.to);
 
   const [payRaw, orderRaw, itemRaw, debtRaw, expenseRows] = await Promise.all([
     // Revenue collected = payments received in the period (whenever the order was placed).
@@ -96,8 +130,8 @@ export async function getAnalytics(from: string, to: string) {
         { $limit: 10 },
       ],
     }),
-    // Kirana expenses; spentOn is local midnight, so the day range matches exactly.
-    prisma.expense.groupBy({ by: ["category"], where: { spentOn: { gte: start, lt: end } }, _sum: { amount: true } }),
+    // Kirana expenses; spentOn is local midnight, so the calendar day range matches exactly.
+    prisma.expense.groupBy({ by: ["category"], where: { spentOn: { gte: expenseDays.start, lt: expenseDays.end } }, _sum: { amount: true } }),
   ]);
 
   const pay = (payRaw as unknown as Row[])[0] as { total: Row[]; byDay: Row[]; byMethod: Row[] };
@@ -111,7 +145,7 @@ export async function getAnalytics(from: string, to: string) {
 
   const payByDay = new Map(pay.byDay.map((r) => [String(r._id), num(r.sum)]));
   const ordByDay = new Map(ord.byDay.map((r) => [String(r._id), r]));
-  const daily = eachDay(from, to).map((d) => ({
+  const daily = eachDay(businessYmd(shift, start), businessYmd(shift, new Date(end.getTime() - 1))).map((d) => ({
     day: d,
     collected: payByDay.get(d) ?? 0,
     outstanding: num(ordByDay.get(d)?.outstanding),
@@ -165,8 +199,3 @@ export async function getAnalytics(from: string, to: string) {
 }
 
 export type Analytics = Awaited<ReturnType<typeof getAnalytics>>;
-
-export const defaultCustomRange = () => {
-  const today = toYmd();
-  return { from: addDays(today, -29), to: today };
-};

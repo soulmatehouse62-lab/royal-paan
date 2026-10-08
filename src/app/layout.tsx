@@ -4,7 +4,7 @@ import { getLocale, getT } from "@/lib/i18n/server";
 import { I18nProvider } from "@/lib/i18n/client";
 import "./globals.css";
 
-const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", display: "swap", axes: ["opsz"] });
+const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", display: "swap" });
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans", display: "swap" });
 // Devanagari fonts are not preloaded: the browser downloads them only when Hindi
 // text is on screen (unicode-range), so English pages don't pay for them.

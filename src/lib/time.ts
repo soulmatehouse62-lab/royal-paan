@@ -83,6 +83,29 @@ export function dayRange(fromYmd: string, toYmdStr: string) {
   return { start: startOfDay(fromYmd), end: startOfDay(addDays(toYmdStr, 1)) };
 }
 
+/** "HH:MM" (24 h) → minutes after midnight, or null if invalid. */
+export function parseHm(s: unknown): number | null {
+  if (typeof s !== "string" || !/^\d{2}:\d{2}$/.test(s)) return null;
+  const [h, m] = s.split(":").map(Number);
+  return h < 24 && m < 60 ? h * 60 + m : null;
+}
+
+export const formatHm = (mins: number) => `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
+
+/** Minutes after local midnight of `date` in TIME_ZONE. */
+export function minutesOfDay(date: Date = new Date()): number {
+  const p = zonedParts(date);
+  return (p.hour % 24) * 60 + p.minute;
+}
+
+/** Local date of `date`, counting the first `dayStartMin` minutes after midnight as the day before. */
+export function businessYmd(dayStartMin: number, date: Date = new Date()): string {
+  return toYmd(new Date(date.getTime() - dayStartMin * 60_000));
+}
+
+/** UTC instant of local time `mins` after midnight on `ymd`. */
+export const atTime = (ymd: string, mins: number) => new Date(startOfDay(ymd).getTime() + mins * 60_000);
+
 export function eachDay(fromYmd: string, toYmdStr: string): string[] {
   const out: string[] = [];
   for (let d = fromYmd; d <= toYmdStr; d = addDays(d, 1)) out.push(d);
